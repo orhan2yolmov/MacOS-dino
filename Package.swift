@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 // MacOS-Dino – Dinamik Hareketli Arka Plan Uygulaması
 // Supabase Veritabanı Projesi: Yolmov
 
@@ -9,7 +9,7 @@ let package = Package(
     platforms: [
         .macOS(.v14)
     ],
-    swiftLanguageVersions: [.v5],
+    swiftLanguageModes: [.v5],
     dependencies: [
         // Supabase Swift SDK
         .package(url: "https://github.com/supabase-community/supabase-swift.git", from: "2.0.0"),
