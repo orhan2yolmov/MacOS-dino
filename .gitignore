@@ -1,0 +1,62 @@
+# macOS genel
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+Packages/
+Package.resolved
+.swiftpm/
+
+# CocoaPods (kullanılmıyor ama güvenlik için)
+Pods/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Supabase
+Supabase/.temp/
+supabase/.temp/
+**/.temp/
+.env
+.env.local
+.env.production
+
+# Keys – GİZLİ TUTULMALI
+**/secrets/
+*.p12
+*.mobileprovision
+
+# Build artifacts
+*.app
+*.ipa
+*.framework
+*.dylib
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output

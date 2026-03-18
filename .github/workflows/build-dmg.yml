@@ -1,0 +1,148 @@
+name: 🦕 Build macOS DMG
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & Package – macOS DMG
+    runs-on: macos-15
+
+    steps:
+      # ─────────────────────────────────────────
+      # 1. Checkout
+      # ─────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ─────────────────────────────────────────
+      # 2. Xcode & Swift versiyonlarını göster
+      # ─────────────────────────────────────────
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      # ─────────────────────────────────────────
+      # 3. SPM bağımlılıklarını çöz
+      # ─────────────────────────────────────────
+      - name: Resolve dependencies
+        run: swift package resolve
+
+      # ─────────────────────────────────────────
+      # 4. Universal binary derle (arm64 + x86_64)
+      # ─────────────────────────────────────────
+      - name: Build arm64
+        run: swift build -c release --arch arm64 2>&1
+
+      - name: Build x86_64
+        run: swift build -c release --arch x86_64 2>&1
+
+      - name: Create universal binary (lipo)
+        run: |
+          lipo -create \
+            .build/arm64-apple-macosx/release/MacOSDino \
+            .build/x86_64-apple-macosx/release/MacOSDino \
+            -output MacOSDino_universal
+          lipo -info MacOSDino_universal
+
+      # ─────────────────────────────────────────
+      # 5. .app bundle oluştur
+      # ─────────────────────────────────────────
+      - name: Create .app bundle
+        run: |
+          set -e
+          APP_DIR="MacOS-Dino.app/Contents"
+
+          mkdir -p "${APP_DIR}/MacOS"
+          mkdir -p "${APP_DIR}/Resources"
+
+          # Universal binary
+          cp MacOSDino_universal "${APP_DIR}/MacOS/MacOSDino"
+          chmod +x "${APP_DIR}/MacOS/MacOSDino"
+
+          # Info.plist
+          cp MacOSDino/App/Info.plist "${APP_DIR}/Info.plist"
+
+          # Assets (xcassets → bundle)
+          if [ -d "MacOSDino/Resources/Assets.xcassets" ]; then
+            xcrun actool \
+              --compile "${APP_DIR}/Resources" \
+              --platform macosx \
+              --minimum-deployment-target 14.0 \
+              --output-format human-readable-text \
+              MacOSDino/Resources/Assets.xcassets \
+              2>&1 || echo "actool warning (icon olmadan devam)"
+          fi
+
+          # Metal shader'ları resource bundle'a kopyala
+          for metal in MacOSDino/Core/Shaders/*.metal; do
+            cp "$metal" "${APP_DIR}/Resources/" 2>/dev/null || true
+          done
+
+          echo "✅ App bundle:"
+          find "MacOS-Dino.app" -type f
+
+      # ─────────────────────────────────────────
+      # 6. Ad-hoc code signing (Gatekeeper bypass)
+      # ─────────────────────────────────────────
+      - name: Ad-hoc sign
+        run: |
+          codesign --deep --force --sign - MacOS-Dino.app
+          codesign --verify --verbose MacOS-Dino.app
+          echo "✅ Ad-hoc signed"
+
+      # ─────────────────────────────────────────
+      # 7. DMG oluştur
+      # ─────────────────────────────────────────
+      - name: Create DMG
+        run: |
+          set -e
+          VERSION="1.0.0"
+          DMG_NAME="MacOS-Dino-${VERSION}.dmg"
+
+          # Staging dizini
+          mkdir -p dmg_staging
+          cp -r "MacOS-Dino.app" dmg_staging/
+          ln -s /Applications dmg_staging/Applications
+
+          # DMG oluştur
+          hdiutil create \
+            -volname "MacOS-Dino ${VERSION}" \
+            -srcfolder dmg_staging \
+            -ov \
+            -format UDZO \
+            -fs HFS+ \
+            "${DMG_NAME}"
+
+          echo "✅ DMG oluşturuldu:"
+          ls -lh "${DMG_NAME}"
+          echo "DMG_NAME=${DMG_NAME}" >> $GITHUB_ENV
+
+      # ─────────────────────────────────────────
+      # 8. Artifact olarak yükle
+      # ─────────────────────────────────────────
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MacOS-Dino-DMG
+          path: MacOS-Dino-*.dmg
+          retention-days: 30
+
+      # ─────────────────────────────────────────
+      # 9. Build özeti
+      # ─────────────────────────────────────────
+      - name: Build summary
+        run: |
+          echo "## 🦕 MacOS-Dino Build Özeti" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Alan | Bilgi |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| DMG  | \`${{ env.DMG_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Mimari | Universal (arm64 + x86_64) |" >> $GITHUB_STEP_SUMMARY
+          echo "| İmza | Ad-hoc (geliştirme) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Minimum macOS | 14.0 Sonoma |" >> $GITHUB_STEP_SUMMARY
+          DMG_SIZE=$(du -sh MacOS-Dino-*.dmg | cut -f1)
+          echo "| Boyut | ${DMG_SIZE} |" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- App Sandbox -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
+    <!-- Hardened Runtime -->
+    <key>com.apple.security.hardened-runtime</key>
+    <true/>
+
+    <!-- Ağ erişimi – Supabase API çağrıları için -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- Dosya erişimi – Video import için -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+
+    <!-- Application Support / Cache dizini -->
+    <key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
+    <array>
+        <string>/Library/Application Support/MacOS-Dino/</string>
+    </array>
+
+    <!-- Mikrofon erişimi – Ses reaktif wallpaper için -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+
+    <!-- Metal / GPU erişimi -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <false/>
+</dict>
+</plist>
