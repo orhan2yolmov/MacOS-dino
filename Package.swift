@@ -9,7 +9,6 @@ let package = Package(
     platforms: [
         .macOS(.v14)
     ],
-    swiftLanguageModes: [.v5],
     dependencies: [
         // Supabase Swift SDK
         .package(url: "https://github.com/supabase-community/supabase-swift.git", from: "2.0.0"),
@@ -36,5 +35,6 @@ let package = Package(
                 .process("Core/Shaders/LiquidGlass.metal"),
             ]
         ),
-    ]
+    ],
+    swiftLanguageModes: [.v5]
 )
