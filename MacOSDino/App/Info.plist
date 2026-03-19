@@ -26,18 +26,12 @@
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
 
+    <!-- NSPrincipalClass – SwiftUI @main App için gerekli -->
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+
     <!-- Login item – Başlangıçta çalışsın -->
     <key>LSBackgroundOnly</key>
-    <false/>
-
-    <!-- Hardened Runtime + Sandbox -->
-    <key>com.apple.security.app-sandbox</key>
-    <true/>
-    <key>com.apple.security.files.user-selected.read-write</key>
-    <true/>
-    <key>com.apple.security.network.client</key>
-    <true/>
-    <key>com.apple.security.network.server</key>
     <false/>
 
     <!-- Kamera/Mikrofon – Ses reaktif duvar kağıdı için -->

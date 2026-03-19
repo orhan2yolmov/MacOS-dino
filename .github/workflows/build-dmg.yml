@@ -49,7 +49,30 @@ jobs:
           lipo -info MacOSDino_universal
 
       # ─────────────────────────────────────────
-      # 5. .app bundle oluştur
+      # 5. Metal shader'ları derle → default.metallib
+      # ─────────────────────────────────────────
+      - name: Compile Metal shaders
+        run: |
+          set -e
+          METAL_SOURCES=$(find MacOSDino/Core/Shaders -name "*.metal" | tr '\n' ' ')
+          echo "🔨 Metal kaynakları: $METAL_SOURCES"
+
+          # .metal → .air (Architecture-Independent Representation)
+          xcrun -sdk macosx metal \
+            -mmacosx-version-min=14.0 \
+            -std=metal3.0 \
+            $METAL_SOURCES \
+            -o /tmp/default.air 2>&1
+
+          # .air → .metallib
+          xcrun -sdk macosx metallib \
+            /tmp/default.air \
+            -o /tmp/default.metallib 2>&1
+
+          echo "✅ Metal derlendi: $(ls -lh /tmp/default.metallib)"
+
+      # ─────────────────────────────────────────
+      # 6. .app bundle oluştur
       # ─────────────────────────────────────────
       - name: Create .app bundle
         run: |
@@ -66,6 +89,9 @@ jobs:
           # Info.plist
           cp MacOSDino/App/Info.plist "${APP_DIR}/Info.plist"
 
+          # PkgInfo – macOS bundle tanımlama
+          printf 'APPL????' > "${APP_DIR}/PkgInfo"
+
           # Assets (xcassets → bundle)
           if [ -d "MacOSDino/Resources/Assets.xcassets" ]; then
             xcrun actool \
@@ -77,25 +103,40 @@ jobs:
               2>&1 || echo "actool warning (icon olmadan devam)"
           fi
 
-          # Metal shader'ları resource bundle'a kopyala
-          for metal in MacOSDino/Core/Shaders/*.metal; do
-            cp "$metal" "${APP_DIR}/Resources/" 2>/dev/null || true
-          done
+          # Derlenmiş Metal library'yi ekle (ham kaynak yerine)
+          cp /tmp/default.metallib "${APP_DIR}/Resources/default.metallib"
+
+          # SPM resource bundle'ı kopyala (arm64 build'den)
+          SPM_BUNDLE=".build/arm64-apple-macosx/release/MacOSDino_MacOSDino.bundle"
+          if [ -d "$SPM_BUNDLE" ]; then
+            cp -r "$SPM_BUNDLE" "${APP_DIR}/Resources/"
+            echo "✅ SPM resource bundle kopyalandı"
+          else
+            echo "ℹ️  SPM resource bundle bulunamadı (Bundle.module kullanılmıyor)"
+          fi
 
           echo "✅ App bundle:"
-          find "MacOS-Dino.app" -type f
+          find "MacOS-Dino.app" -type f | sort
 
       # ─────────────────────────────────────────
-      # 6. Ad-hoc code signing (Gatekeeper bypass)
+      # 7. Ad-hoc code signing
       # ─────────────────────────────────────────
       - name: Ad-hoc sign
         run: |
-          codesign --deep --force --sign - MacOS-Dino.app
+          set -e
+          # Entitlements ile imzala (network, audio, file access)
+          codesign \
+            --deep \
+            --force \
+            --sign - \
+            --entitlements MacOSDino/App/MacOSDino-Dev.entitlements \
+            MacOS-Dino.app
+
           codesign --verify --verbose MacOS-Dino.app
-          echo "✅ Ad-hoc signed"
+          echo "✅ Ad-hoc signed (dev entitlements)"
 
       # ─────────────────────────────────────────
-      # 7. DMG oluştur
+      # 8. DMG oluştur
       # ─────────────────────────────────────────
       - name: Create DMG
         run: |
@@ -122,7 +163,7 @@ jobs:
           echo "DMG_NAME=${DMG_NAME}" >> $GITHUB_ENV
 
       # ─────────────────────────────────────────
-      # 8. Artifact olarak yükle
+      # 9. Artifact olarak yükle
       # ─────────────────────────────────────────
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
@@ -132,7 +173,7 @@ jobs:
           retention-days: 30
 
       # ─────────────────────────────────────────
-      # 9. Build özeti
+      # 10. Build özeti
       # ─────────────────────────────────────────
       - name: Build summary
         run: |
