@@ -81,9 +81,10 @@ final class DesktopWindow: NSWindow {
         let playerLayer = AVPlayerLayer(player: player)
         playerLayer.videoGravity = .resizeAspectFill
         playerLayer.frame = contentView?.bounds ?? frame
-
-        // Metal-backed rendering for Apple Silicon
         playerLayer.contentsScale = displayConfig.scaleFactor
+
+        // Fade geçişi için engine'e layer referansını ver
+        engine.playerLayer = playerLayer
 
         contentView?.wantsLayer = true
         contentView?.layer?.addSublayer(playerLayer)

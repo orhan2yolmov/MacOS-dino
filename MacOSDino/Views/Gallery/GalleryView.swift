@@ -1,7 +1,5 @@
 // GalleryView.swift
-// MacOS-Dino – Ana Galeri Görünümü
-// Sol sidebar (kategori, filtre) + Merkez grid + Sağ detay paneli
-// Referans: Wallpapers Professional Suite tasarımı
+// MacOS-Dino – Ana Galeri Görünümü (Modern Redesign)
 
 import SwiftUI
 
@@ -55,172 +53,171 @@ struct GalleryView: View {
 
     private var sidebarContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Üst: Logo
-            HStack {
-                Image(systemName: "sparkles.rectangle.stack")
-                    .font(.title2)
-                    .foregroundStyle(.blue)
+            // Logo + başlık
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(
+                            colors: [.blue, Color(red: 0.4, green: 0.2, blue: 0.9)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        .frame(width: 32, height: 32)
+                    Image(systemName: "sparkles.rectangle.stack")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white)
+                }
                 Text("MacOS-Dino")
-                    .font(.headline)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
             }
-            .padding()
+            .padding(.horizontal, 16)
+            .padding(.vertical, 16)
+
+            Divider().opacity(0.3)
 
             // Navigasyon listesi
-            List(selection: $sortOption) {
-                Section {
-                    NavigationLink(value: WallpaperSortOption.hot) {
-                        Label("Popüler", systemImage: "flame.fill")
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    // Keşfet
+                    SidebarSection(title: "KEŞFET") {
+                        SidebarButton(
+                            icon: "flame.fill",
+                            label: "Popüler",
+                            color: .orange,
+                            isActive: sortOption == .hot
+                        ) {
+                            sortOption = .hot
+                            Task { await wallpaperService.loadWallpapers(category: selectedCategory, sort: .hot) }
+                        }
+                        SidebarButton(
+                            icon: "sparkles",
+                            label: "Yeni",
+                            color: .blue,
+                            isActive: sortOption == .new
+                        ) {
+                            sortOption = .new
+                            Task { await wallpaperService.loadWallpapers(category: selectedCategory, sort: .new) }
+                        }
+                        SidebarButton(icon: "heart.fill", label: "Favoriler", color: .pink) {}
+                        SidebarButton(icon: "icloud.and.arrow.up", label: "Yüklediklerim", color: .cyan) {}
+                        SidebarButton(icon: "arrow.down.circle.fill", label: "İndirilenler", color: .green) {}
                     }
-                    NavigationLink(value: WallpaperSortOption.new) {
-                        Label("Yeni", systemImage: "sparkles")
-                    }
 
-                    Button {
-                        // Favoriler
-                    } label: {
-                        Label("Favoriler", systemImage: "heart.fill")
-                            .foregroundStyle(.pink)
-                    }
-
-                    Button {
-                        // Yüklenenler
-                    } label: {
-                        Label("Yüklediklerim", systemImage: "icloud.and.arrow.up")
-                    }
-
-                    Button {
-                        // İndirilenler
-                    } label: {
-                        Label("İndirilenler", systemImage: "arrow.down.circle.fill")
-                    }
-                }
-
-                // Kategoriler
-                Section("Kategoriler") {
-                    ForEach(WallpaperCategory.allCases) { category in
-                        Button {
-                            if selectedCategory == category {
-                                selectedCategory = nil
-                            } else {
-                                selectedCategory = category
-                            }
-                            Task {
-                                await wallpaperService.loadWallpapers(
-                                    category: selectedCategory,
-                                    sort: sortOption
-                                )
-                            }
-                        } label: {
-                            HStack {
-                                Image(systemName: category.icon)
-                                    .foregroundStyle(category.color)
-                                Text(category.displayName)
-
-                                Spacer()
-
-                                if selectedCategory == category {
-                                    Image(systemName: "checkmark")
-                                        .font(.caption)
-                                        .foregroundStyle(.blue)
+                    SidebarSection(title: "KATEGORİLER") {
+                        ForEach(WallpaperCategory.allCases) { category in
+                            SidebarButton(
+                                icon: category.icon,
+                                label: category.displayName,
+                                color: category.color,
+                                isActive: selectedCategory == category
+                            ) {
+                                withAnimation(.spring(duration: 0.25)) {
+                                    selectedCategory = selectedCategory == category ? nil : category
+                                }
+                                Task {
+                                    await wallpaperService.loadWallpapers(
+                                        category: selectedCategory,
+                                        sort: sortOption
+                                    )
                                 }
                             }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
-
-                // En-boy oranı
-                Section("Oran") {
-                    ForEach(AspectRatio.allCases) { ratio in
-                        Button {
-                            if selectedRatio == ratio {
-                                selectedRatio = nil
-                            } else {
-                                selectedRatio = ratio
-                            }
-                        } label: {
-                            HStack {
-                                Text(ratio.displayName)
-                                    .font(.caption)
-                                Spacer()
-                                if selectedRatio == ratio {
-                                    Image(systemName: "checkmark")
-                                        .font(.caption)
-                                        .foregroundStyle(.blue)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+                .padding(.vertical, 8)
             }
-            .listStyle(.sidebar)
 
-            Divider()
+            Divider().opacity(0.3)
 
-            // Alt: Refresh butonu
+            // Yenile butonu
             Button {
-                Task {
-                    await wallpaperService.loadWallpapers(
-                        category: selectedCategory,
-                        sort: sortOption
-                    )
-                }
+                Task { await wallpaperService.loadWallpapers(category: selectedCategory, sort: sortOption) }
             } label: {
-                Label("Verileri Yenile", systemImage: "arrow.clockwise")
-                    .frame(maxWidth: .infinity)
+                Label("Yenile", systemImage: "arrow.clockwise")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
             }
-            .buttonStyle(.bordered)
-            .padding()
+            .buttonStyle(.plain)
         }
+        .background(Color(red: 0.06, green: 0.07, blue: 0.12))
     }
 
     // MARK: - Main Content (Grid)
 
     private var mainContent: some View {
         VStack(spacing: 0) {
-            // Üst bar: Başlık + View mode toggle
-            HStack {
-                VStack(alignment: .leading) {
-                    Text("Keşfet")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+            // Üst header
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(selectedCategory?.displayName ?? "Keşfet")
+                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
 
                     Text(headerSubtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.4))
                 }
 
                 Spacer()
 
                 // Grid/List toggle
-                Picker("Görünüm", selection: $viewMode) {
-                    Image(systemName: "square.grid.2x2").tag(ViewMode.grid)
-                    Image(systemName: "list.bullet").tag(ViewMode.list)
+                HStack(spacing: 4) {
+                    ForEach([(ViewMode.grid, "square.grid.2x2"), (ViewMode.list, "list.bullet")], id: \.0) { mode, icon in
+                        Button {
+                            withAnimation(.spring(duration: 0.2)) { viewMode = mode }
+                        } label: {
+                            Image(systemName: icon)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(viewMode == mode ? .white : .white.opacity(0.35))
+                                .frame(width: 30, height: 30)
+                                .background(viewMode == mode ? .white.opacity(0.12) : .clear)
+                                .clipShape(RoundedRectangle(cornerRadius: 7))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 80)
+                .padding(3)
+                .background(.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 9))
             }
-            .padding()
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 16)
 
             // Wallpaper grid
             if wallpaperService.isLoading {
                 Spacer()
-                ProgressView("Yükleniyor...")
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(.blue)
+                    Text("Yükleniyor...")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.4))
+                }
                 Spacer()
             } else if wallpaperService.wallpapers.isEmpty {
                 Spacer()
-                ContentUnavailableView(
-                    "Wallpaper Bulunamadı",
-                    systemImage: "photo.on.rectangle.angled",
-                    description: Text("Farklı filtreler deneyin veya arama yapın")
-                )
+                VStack(spacing: 16) {
+                    Image(systemName: "photo.on.rectangle.angled")
+                        .font(.system(size: 48, weight: .light))
+                        .foregroundStyle(.white.opacity(0.2))
+                    Text("Wallpaper Bulunamadı")
+                        .font(.headline)
+                        .foregroundStyle(.white.opacity(0.5))
+                    Text("Farklı filtreler deneyin")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.25))
+                }
                 Spacer()
             } else {
                 ScrollView {
                     LazyVGrid(
                         columns: gridColumns,
-                        spacing: 16
+                        spacing: 14
                     ) {
                         ForEach(wallpaperService.wallpapers) { wallpaper in
                             WallpaperCard(
@@ -234,10 +231,12 @@ struct GalleryView: View {
                             }
                         }
                     }
-                    .padding()
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 20)
                 }
             }
         }
+        .background(Color(red: 0.08, green: 0.09, blue: 0.14))
     }
 
     // MARK: - Detail Panel
@@ -248,19 +247,20 @@ struct GalleryView: View {
                 WallpaperDetailView(wallpaper: wallpaper)
                     .environmentObject(engine)
             } else {
-                VStack(spacing: 16) {
+                VStack(spacing: 14) {
                     Image(systemName: "photo.on.rectangle")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.tertiary)
-                    Text("Bir wallpaper seçin")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                    Text("Detayları ve önizlemeyi burada görüntüleyebilirsiniz")
+                        .font(.system(size: 44, weight: .light))
+                        .foregroundStyle(.white.opacity(0.15))
+                    Text("Wallpaper Seçin")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.35))
+                    Text("Detayları ve önizlemeyi\nburada görüntüleyin")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.white.opacity(0.2))
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(red: 0.07, green: 0.08, blue: 0.13))
             }
         }
     }
@@ -268,13 +268,71 @@ struct GalleryView: View {
     // MARK: - Helpers
 
     private var gridColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: 200, maximum: 300), spacing: 16)]
+        [GridItem(.adaptive(minimum: 190, maximum: 280), spacing: 14)]
     }
 
     private var headerSubtitle: String {
         let count = wallpaperService.wallpapers.count
-        let categoryText = selectedCategory?.displayName ?? "tüm kategoriler"
-        return "\(count) yüksek kaliteli \(categoryText) wallpaper"
+        let cat = selectedCategory?.displayName ?? "tüm kategoriler"
+        return "\(count) wallpaper · \(cat)"
+    }
+}
+
+// MARK: - Sidebar Helper Views
+
+private struct SidebarSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.3))
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 4)
+
+            content
+        }
+    }
+}
+
+private struct SidebarButton: View {
+    let icon: String
+    let label: String
+    let color: Color
+    var isActive: Bool = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(isActive ? color : .white.opacity(0.45))
+                    .frame(width: 18)
+
+                Text(label)
+                    .font(.system(size: 13, weight: isActive ? .semibold : .regular))
+                    .foregroundStyle(isActive ? .white : .white.opacity(0.65))
+
+                Spacer()
+
+                if isActive {
+                    Circle()
+                        .fill(color)
+                        .frame(width: 6, height: 6)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(isActive ? color.opacity(0.12) : .clear)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 6)
     }
 }
 

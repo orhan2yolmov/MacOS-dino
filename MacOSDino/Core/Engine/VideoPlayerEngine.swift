@@ -1,6 +1,6 @@
 // VideoPlayerEngine.swift
 // MacOS-Dino – AVFoundation + Core Video + Hardware Acceleration
-// HEVC/H.264 video oynatma motoru, sonsuz loop desteği
+// HEVC/H.264 video oynatma motoru, sonsuz loop + fade geçiş + playback rate
 
 import AVFoundation
 import CoreVideo
@@ -15,14 +15,23 @@ final class VideoPlayerEngine: ObservableObject {
     @Published var isLoading = false
     @Published var duration: Double = 0
     @Published var currentTime: Double = 0
+    @Published var playbackRate: Float = 1.0  // 0.25 = slow-mo, 1.0 = normal
+
+    // Fade geçiş için playerLayer zayıf referansı
+    weak var playerLayer: AVPlayerLayer?
 
     private(set) var player: AVPlayer?
     private var playerItem: AVPlayerItem?
     private var loopObserver: Any?
     private var timeObserver: Any?
+    private var fadeTimer: Timer?
     private var loopStart: CMTime = .zero
     private var loopEnd: CMTime = .positiveInfinity
     private var cancellables = Set<AnyCancellable>()
+
+    // Fade ayarları
+    var fadeDuration: Double = 1.5   // saniye
+    var fadeOutStart: Double = 2.0   // sona kaç saniye kala fade başlasın
 
     // MARK: - Video Loading
 
@@ -78,7 +87,10 @@ final class VideoPlayerEngine: ObservableObject {
                 self.player?.isMuted = true
                 self.player?.allowsExternalPlayback = false
 
-                // Sonsuz loop setup
+                // Playback rate uygula
+                self.player?.rate = self.playbackRate
+
+                // Sonsuz loop + fade setup
                 self.setupLooping()
 
                 // Zaman takibi
@@ -110,7 +122,7 @@ final class VideoPlayerEngine: ObservableObject {
     // MARK: - Playback Control
 
     func play() {
-        player?.play()
+        player?.rate = playbackRate
         isPlaying = true
     }
 
@@ -120,6 +132,7 @@ final class VideoPlayerEngine: ObservableObject {
     }
 
     func stop() {
+        fadeTimer?.invalidate()
         player?.pause()
         player?.seek(to: loopStart)
         isPlaying = false
@@ -131,35 +144,80 @@ final class VideoPlayerEngine: ObservableObject {
         player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
+    /// Oynatma hızını değiştir (0.25 slow-mo, 0.5 yavaş, 1.0 normal)
+    func setPlaybackRate(_ rate: Float) {
+        playbackRate = rate
+        if isPlaying {
+            player?.rate = rate
+        }
+    }
+
     // MARK: - Private
 
     private func setupLooping() {
-        // Önceki observer'ı kaldır
+        // Önceki observer'ları temizle
         if let observer = loopObserver {
             player?.removeTimeObserver(observer)
             loopObserver = nil
         }
+        fadeTimer?.invalidate()
+        cancellables.removeAll()
 
         guard let player else { return }
 
-        // Boundary observer: loop bitiş noktasına ulaşınca başa sar
-        let boundary = [NSValue(time: loopEnd)]
-        loopObserver = player.addBoundaryTimeObserver(
-            forTimes: boundary,
-            queue: .main
-        ) { [weak self] in
-            guard let self else { return }
-            self.player?.seek(to: self.loopStart, toleranceBefore: .zero, toleranceAfter: .zero)
-        }
-
-        // Ayrıca AVPlayerItem bitişini de dinle (eğer loopEnd = sonuncuysa)
+        // AVPlayerItem bitişini dinle → fade geçişli loop
         NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime, object: playerItem)
             .sink { [weak self] _ in
                 guard let self else { return }
-                self.player?.seek(to: self.loopStart, toleranceBefore: .zero, toleranceAfter: .zero)
-                self.player?.play()
+                Task { @MainActor in
+                    await self.loopWithFade()
+                }
             }
             .store(in: &cancellables)
+
+        // Sona yaklaşınca fade başlat
+        setupFadeBoundary()
+    }
+
+    /// Video sonuna fadeOutStart saniye kala CALayer opacity'yi düşür
+    private func setupFadeBoundary() {
+        guard let player, duration > 0 else { return }
+
+        let endSeconds = loopEnd == .positiveInfinity ? duration : CMTimeGetSeconds(loopEnd)
+        let fadeStartSeconds = max(0, endSeconds - fadeOutStart)
+        let fadeTime = CMTime(seconds: fadeStartSeconds, preferredTimescale: 600)
+
+        loopObserver = player.addBoundaryTimeObserver(
+            forTimes: [NSValue(time: fadeTime)],
+            queue: .main
+        ) { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                self.fadeLayer(toOpacity: 0, duration: self.fadeDuration)
+            }
+        }
+    }
+
+    /// Fade out → seek başa → fade in
+    private func loopWithFade() async {
+        fadeLayer(toOpacity: 0, duration: 0.3)
+        try? await Task.sleep(nanoseconds: 350_000_000)  // 0.35s bekle
+        player?.seek(to: loopStart, toleranceBefore: .zero, toleranceAfter: .zero)
+        player?.rate = playbackRate
+        fadeLayer(toOpacity: 1, duration: fadeDuration)
+    }
+
+    /// AVPlayerLayer CALayer opacity animasyonu
+    private func fadeLayer(toOpacity opacity: Float, duration: Double) {
+        guard let layer = playerLayer else { return }
+        let anim = CABasicAnimation(keyPath: "opacity")
+        anim.fromValue = layer.opacity
+        anim.toValue = opacity
+        anim.duration = duration
+        anim.fillMode = .forwards
+        anim.isRemovedOnCompletion = false
+        layer.add(anim, forKey: "dinoFade")
+        layer.opacity = opacity
     }
 
     private func setupTimeObserver() {

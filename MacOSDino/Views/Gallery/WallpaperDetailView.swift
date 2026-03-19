@@ -11,7 +11,7 @@ struct WallpaperDetailView: View {
     @State private var selectedDisplayID: CGDirectDisplayID?
     @State private var isFavorite = false
     @State private var isDownloading = false
-    @State private var showReport = false
+    @State private var playbackRate: Float = 1.0
 
     var body: some View {
         ScrollView {
@@ -26,6 +26,12 @@ struct WallpaperDetailView: View {
                 wallpaperInfoSection
 
                 Divider()
+
+                // MARK: - Video Playback Controls (video ise)
+                if wallpaper.contentType == .video {
+                    playbackControlSection
+                    Divider()
+                }
 
                 // MARK: - Actions
                 actionButtons
@@ -46,6 +52,87 @@ struct WallpaperDetailView: View {
     }
 
     // MARK: - Display Config
+
+    // MARK: - Playback Controls
+
+    private var playbackControlSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("VİDEO OYNATMA")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fontWeight(.semibold)
+
+            // Hız slider
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Oynatma Hızı")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(playbackRateLabel)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.blue)
+                        .fontWeight(.semibold)
+                }
+
+                Slider(value: Binding(
+                    get: { Double(playbackRate) },
+                    set: { val in
+                        playbackRate = Float(val)
+                        engine.videoPlayers.values.forEach { $0.setPlaybackRate(playbackRate) }
+                    }
+                ), in: 0.1...1.0, step: 0.05)
+                .tint(.blue)
+
+                // Preset butonları
+                HStack(spacing: 6) {
+                    ForEach([(0.25, "¼×"), (0.5, "½×"), (0.75, "¾×"), (1.0, "1×")], id: \.0) { rate, lbl in
+                        Button {
+                            playbackRate = Float(rate)
+                            engine.videoPlayers.values.forEach { $0.setPlaybackRate(Float(rate)) }
+                        } label: {
+                            Text(lbl)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(abs(playbackRate - Float(rate)) < 0.01 ? .white : .secondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 4)
+                                .background(abs(playbackRate - Float(rate)) < 0.01 ? Color.blue : Color.secondary.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            // Fade geçiş süresi
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Geçiş (Fade) Süresi")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(String(format: "%.1fs", engine.videoPlayers.values.first?.fadeDuration ?? 1.5))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.purple)
+                        .fontWeight(.semibold)
+                }
+                Slider(value: Binding(
+                    get: { engine.videoPlayers.values.first?.fadeDuration ?? 1.5 },
+                    set: { val in engine.videoPlayers.values.forEach { $0.fadeDuration = val } }
+                ), in: 0.3...4.0, step: 0.1)
+                .tint(.purple)
+            }
+        }
+    }
+
+    private var playbackRateLabel: String {
+        switch playbackRate {
+        case ..<0.3: return "Çok Yavaş"
+        case ..<0.6: return "Yavaş"
+        case ..<0.9: return "Orta"
+        default: return "Normal"
+        }
+    }
 
     private var displayConfigSection: some View {
         VStack(alignment: .leading, spacing: 12) {
