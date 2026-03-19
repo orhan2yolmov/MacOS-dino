@@ -105,6 +105,31 @@ rm -rf dmg_staging && mkdir -p dmg_staging
 cp -r MacOS-Dino.app dmg_staging/
 ln -s /Applications dmg_staging/Applications
 
+# Quarantine'i kaldıran kurulum scripti
+cat > dmg_staging/Install.command << 'INSTALL_EOF'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_SRC="$SCRIPT_DIR/MacOS-Dino.app"
+APP_DEST="/Applications/MacOS-Dino.app"
+
+echo ""
+echo "🦕 MacOS-Dino kuruluyor..."
+
+# Applications klasörüne kopyala
+rm -rf "$APP_DEST"
+cp -r "$APP_SRC" "$APP_DEST"
+
+# Gatekeeper quarantine özelliğini kaldır
+xattr -rd com.apple.quarantine "$APP_DEST" 2>/dev/null
+sudo xattr -rd com.apple.quarantine "$APP_DEST" 2>/dev/null
+
+echo "✅ Kurulum tamamlandı!"
+echo "   Uygulama şimdi açılıyor..."
+sleep 1
+open "$APP_DEST"
+INSTALL_EOF
+chmod +x dmg_staging/Install.command
+
 hdiutil create \
   -volname "MacOS-Dino ${VERSION}" \
   -srcfolder dmg_staging \
