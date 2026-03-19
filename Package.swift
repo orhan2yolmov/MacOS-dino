@@ -26,6 +26,7 @@ let package = Package(
             exclude: [
                 "App/Info.plist",
                 "App/MacOSDino.entitlements",
+                "App/MacOSDino-Dev.entitlements",
             ],
             resources: [
                 .process("Resources"),
