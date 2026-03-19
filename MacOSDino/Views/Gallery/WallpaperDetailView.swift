@@ -12,6 +12,7 @@ struct WallpaperDetailView: View {
     @State private var isFavorite = false
     @State private var isDownloading = false
     @State private var playbackRate: Float = 1.0
+    @State private var showReport = false
 
     var body: some View {
         ScrollView {

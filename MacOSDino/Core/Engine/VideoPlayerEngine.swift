@@ -167,11 +167,9 @@ final class VideoPlayerEngine: ObservableObject {
 
         // AVPlayerItem bitişini dinle → fade geçişli loop
         NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime, object: playerItem)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                guard let self else { return }
-                Task { @MainActor in
-                    await self.loopWithFade()
-                }
+                self?.loopWithFade()
             }
             .store(in: &cancellables)
 
@@ -199,12 +197,15 @@ final class VideoPlayerEngine: ObservableObject {
     }
 
     /// Fade out → seek başa → fade in
-    private func loopWithFade() async {
+    private func loopWithFade() {
         fadeLayer(toOpacity: 0, duration: 0.3)
-        try? await Task.sleep(nanoseconds: 350_000_000)  // 0.35s bekle
-        player?.seek(to: loopStart, toleranceBefore: .zero, toleranceAfter: .zero)
-        player?.rate = playbackRate
-        fadeLayer(toOpacity: 1, duration: fadeDuration)
+        // 0.35s sonra seek + fade in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self else { return }
+            self.player?.seek(to: self.loopStart, toleranceBefore: .zero, toleranceAfter: .zero)
+            self.player?.rate = self.playbackRate
+            self.fadeLayer(toOpacity: 1, duration: self.fadeDuration)
+        }
     }
 
     /// AVPlayerLayer CALayer opacity animasyonu

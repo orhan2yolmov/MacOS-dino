@@ -219,22 +219,6 @@ struct Badge: View {
 }
 
 
-struct WallpaperCard: View {
-    let wallpaper: Wallpaper
-    let isSelected: Bool
-
-    @State private var isHovered = false
-    @State private var thumbnailImage: NSImage?
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Thumbnail
-            ZStack {
-                // Arka plan
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.ultraThinMaterial)
-                    .aspectRatio(16/9, contentMode: .fit)
-
                 // Thumbnail görseli
                 if let image = thumbnailImage {
                     Image(nsImage: image)
@@ -342,22 +326,5 @@ struct WallpaperCard: View {
         } catch {
             // Thumbnail yüklenemedi – placeholder kalır
         }
-    }
-}
-
-// MARK: - Badge Component
-
-struct Badge: View {
-    let text: String
-    let color: Color
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(color.opacity(0.85))
-            .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 }
