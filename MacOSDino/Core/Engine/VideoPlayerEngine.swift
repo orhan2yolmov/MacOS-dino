@@ -198,13 +198,16 @@ final class VideoPlayerEngine: ObservableObject {
 
     /// Fade out → seek başa → fade in
     private func loopWithFade() {
-        fadeLayer(toOpacity: 0, duration: 0.3)
-        // 0.35s sonra seek + fade in
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+        let outDuration = min(fadeDuration, 0.6)
+        fadeLayer(toOpacity: 0, duration: outDuration)
+        // fade-out bitmeden seek + play başlatma
+        DispatchQueue.main.asyncAfter(deadline: .now() + outDuration + 0.05) { [weak self] in
             guard let self else { return }
-            self.player?.seek(to: self.loopStart, toleranceBefore: .zero, toleranceAfter: .zero)
-            self.player?.rate = self.playbackRate
-            self.fadeLayer(toOpacity: 1, duration: self.fadeDuration)
+            self.player?.seek(to: self.loopStart, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                guard let self else { return }
+                self.player?.rate = self.playbackRate
+                self.fadeLayer(toOpacity: 1, duration: self.fadeDuration)
+            }
         }
     }
 

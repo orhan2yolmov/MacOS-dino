@@ -8,6 +8,25 @@ struct MenuBarView: View {
     @EnvironmentObject var auth: AuthService
     @State private var showingAuth = false
 
+    private func openLoginWindow() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 560),
+            styleMask: [.titled, .closable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.center()
+        window.titlebarAppearsTransparent = true
+        window.title = ""
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(
+            rootView: LoginView()
+                .environmentObject(AuthService.shared)
+        )
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // ── Başlık
@@ -35,10 +54,6 @@ struct MenuBarView: View {
         }
         .frame(width: 300)
         .background(Color(red: 0.08, green: 0.09, blue: 0.14).opacity(0.97))
-        .sheet(isPresented: $showingAuth) {
-            LoginView()
-                .environmentObject(auth)
-        }
     }
 
     // MARK: – Header
@@ -226,7 +241,7 @@ struct MenuBarView: View {
                 Divider().opacity(0.15)
             } else {
                 Button {
-                    showingAuth = true
+                    openLoginWindow()
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "person.badge.plus")
@@ -248,10 +263,10 @@ struct MenuBarView: View {
                 Divider().opacity(0.15)
             }
 
-            SettingsLink {
-                MenuActionRow(icon: "gear", label: "Ayarlar...", color: .gray) {}
+            MenuActionRow(icon: "gear", label: "Ayarlar...", color: .gray) {
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                NSApp.activate(ignoringOtherApps: true)
             }
-            .buttonStyle(.plain)
 
             MenuActionRow(icon: "power", label: "MacOS-Dino'dan Çık", color: .red.opacity(0.8)) {
                 NSApplication.shared.terminate(nil)

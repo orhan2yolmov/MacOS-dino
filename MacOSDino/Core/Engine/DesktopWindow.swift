@@ -78,6 +78,15 @@ final class DesktopWindow: NSWindow {
         clearContent()
 
         guard let player = engine.player else { return }
+
+        contentView?.wantsLayer = true
+
+        // Siyah arka plan layer – fade esnasında masaüstü görünmesin
+        let blackLayer = CALayer()
+        blackLayer.backgroundColor = CGColor(red: 0, green: 0, blue: 0, alpha: 1)
+        blackLayer.frame = contentView?.bounds ?? frame
+        contentView?.layer?.addSublayer(blackLayer)
+
         let playerLayer = AVPlayerLayer(player: player)
         playerLayer.videoGravity = .resizeAspectFill
         playerLayer.frame = contentView?.bounds ?? frame
@@ -86,7 +95,6 @@ final class DesktopWindow: NSWindow {
         // Fade geçişi için engine'e layer referansını ver
         engine.playerLayer = playerLayer
 
-        contentView?.wantsLayer = true
         contentView?.layer?.addSublayer(playerLayer)
         self.videoPlayerLayer = playerLayer
 
