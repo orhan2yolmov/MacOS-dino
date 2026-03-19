@@ -2,6 +2,8 @@
 // MacOS-Dino – Giriş / Kayıt Ekranı  (Modern Redesign)
 
 import SwiftUI
+import AuthenticationServices
+import CryptoKit
 
 struct LoginView: View {
     @EnvironmentObject var auth: AuthService
@@ -12,6 +14,7 @@ struct LoginView: View {
     @State private var displayName = ""
     @State private var confirmPassword = ""
     @State private var animateGradient = false
+    @State private var currentNonce: String? = nil
 
     @Environment(\.dismiss) private var dismiss
 
@@ -46,6 +49,23 @@ struct LoginView: View {
 
             // Ana kart
             VStack(spacing: 0) {
+                // Kapat butonu
+                HStack {
+                    Spacer()
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.5))
+                            .frame(width: 28, height: 28)
+                            .background(.white.opacity(0.08))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding([.top, .trailing], 14)
+                }
+
                 // Logo alanı
                 VStack(spacing: 10) {
                     ZStack {
@@ -177,7 +197,7 @@ struct LoginView: View {
 
                 // Apple Sign In
                 Button {
-                    // Apple Sign In flow
+                    startAppleSignIn()
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "apple.logo")
@@ -237,7 +257,84 @@ struct LoginView: View {
             )
             .shadow(color: .black.opacity(0.5), radius: 40)
         }
-        .frame(width: 480, height: isSignUp ? 640 : 560)
+        .frame(width: 480, height: isSignUp ? 660 : 560)
+    }
+
+    // MARK: - Apple Sign In
+
+    private func startAppleSignIn() {
+        let nonce = randomNonceString()
+        currentNonce = nonce
+
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = [.fullName, .email]
+        request.nonce = sha256(nonce)
+
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        let delegate = AppleSignInDelegate(nonce: nonce) { idToken, nonce in
+            Task { await auth.signInWithApple(idToken: idToken, nonce: nonce)
+                if auth.isAuthenticated { dismiss() }
+            }
+        } onError: { error in
+            auth.errorMessage = "Apple giriş iptal edildi"
+        }
+        controller.delegate = delegate
+        controller.presentationContextProvider = delegate
+        // delegate'i yaşatmak için geçici saklama
+        objc_setAssociatedObject(controller, &AssociatedKeys.delegate, delegate, .OBJC_ASSOCIATION_RETAIN)
+        controller.performRequests()
+    }
+
+    private func randomNonceString(length: Int = 32) -> String {
+        var randomBytes = [UInt8](repeating: 0, count: length)
+        _ = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+        return randomBytes.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func sha256(_ input: String) -> String {
+        let data = Data(input.utf8)
+        let hash = SHA256.hash(data: data)
+        return hash.map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+private enum AssociatedKeys {
+    static var delegate = "appleDelegate"
+}
+
+// MARK: - Apple Sign In Delegate
+
+private class AppleSignInDelegate: NSObject,
+    ASAuthorizationControllerDelegate,
+    ASAuthorizationControllerPresentationContextProviding
+{
+    private let nonce: String
+    private let onSuccess: (String, String) -> Void
+    private let onError: (Error) -> Void
+
+    init(nonce: String, onSuccess: @escaping (String, String) -> Void, onError: @escaping (Error) -> Void) {
+        self.nonce = nonce
+        self.onSuccess = onSuccess
+        self.onError = onError
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        return NSApplication.shared.windows.first ?? NSWindow()
+    }
+
+    func authorizationController(controller: ASAuthorizationController,
+                                  didCompleteWithAuthorization authorization: ASAuthorization) {
+        guard
+            let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+            let tokenData = credential.identityToken,
+            let idToken = String(data: tokenData, encoding: .utf8)
+        else { return }
+        onSuccess(idToken, nonce)
+    }
+
+    func authorizationController(controller: ASAuthorizationController,
+                                  didCompleteWithError error: Error) {
+        onError(error)
     }
 }
 

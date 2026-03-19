@@ -13,6 +13,12 @@
     <key>com.apple.security.network.client</key>
     <true/>
 
+    <!-- Sign In with Apple -->
+    <key>com.apple.developer.applesignin</key>
+    <array>
+        <string>Default</string>
+    </array>
+
     <!-- Dosya erişimi – Video import için -->
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
