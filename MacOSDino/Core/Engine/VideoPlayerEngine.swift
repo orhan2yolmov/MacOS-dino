@@ -1,6 +1,7 @@
 // VideoPlayerEngine.swift
-// MacOS-Dino – AVFoundation + Core Video + Hardware Acceleration
-// HEVC/H.264 video oynatma motoru, sonsuz loop + fade geçiş + playback rate
+// MacOS-Dino – AVFoundation seamless loop motoru
+// AVQueuePlayer + AVPlayerLooper → boşluksuz, flash'sız döngü
+// Default: 0.4x slow-motion (macOS Aerial benzeri)
 
 import AVFoundation
 import CoreVideo
@@ -9,29 +10,26 @@ import Combine
 @MainActor
 final class VideoPlayerEngine: ObservableObject {
 
-    // MARK: - Properties
+    // MARK: - Published State
 
     @Published var isPlaying = false
     @Published var isLoading = false
     @Published var duration: Double = 0
     @Published var currentTime: Double = 0
-    @Published var playbackRate: Float = 1.0  // 0.25 = slow-mo, 1.0 = normal
+    @Published var playbackRate: Float = 0.4  // macOS Aerial gibi yavaş
 
-    // Fade geçiş için playerLayer zayıf referansı
+    // Fade için playerLayer referansı
     weak var playerLayer: AVPlayerLayer?
 
-    private(set) var player: AVPlayer?
-    private var playerItem: AVPlayerItem?
-    private var loopObserver: Any?
+    // AVQueuePlayer + Looper = seamless, flash'sız döngü
+    private(set) var queuePlayer: AVQueuePlayer?
+    private var playerLooper: AVPlayerLooper?
+    private var templateItem: AVPlayerItem?
+
     private var timeObserver: Any?
-    private var fadeTimer: Timer?
-    private var loopStart: CMTime = .zero
-    private var loopEnd: CMTime = .positiveInfinity
     private var cancellables = Set<AnyCancellable>()
 
-    // Fade ayarları
-    var fadeDuration: Double = 1.5   // saniye
-    var fadeOutStart: Double = 2.0   // sona kaç saniye kala fade başlasın
+    var fadeDuration: Double = 1.2
 
     // MARK: - Video Loading
 
@@ -39,63 +37,50 @@ final class VideoPlayerEngine: ObservableObject {
         await MainActor.run { isLoading = true }
 
         let asset = AVURLAsset(url: url, options: [
-            AVURLAssetPreferPreciseDurationAndTimingKey: true,
-            // Apple Silicon Media Engine ile donanım hızlandırma
-            "AVURLAssetHTTPHeaderFieldsKey": ["User-Agent": "MacOS-Dino/1.0"]
+            AVURLAssetPreferPreciseDurationAndTimingKey: true
         ])
 
         do {
-            // Asset bilgilerini önceden yükle
             let tracks = try await asset.loadTracks(withMediaType: .video)
-            let duration = try await asset.load(.duration)
+            let dur    = try await asset.load(.duration)
 
-            guard let videoTrack = tracks.first else {
-                print("⚠️ Video track bulunamadı: \(url)")
+            guard let firstTrack = tracks.first else {
+                print("⚠️ Video track yok: \(url)")
+                await MainActor.run { isLoading = false }
                 return
             }
 
-            // Video boyutu ve transform bilgisi (Retina uyum)
-            let naturalSize = try await videoTrack.load(.naturalSize)
-            let transform = try await videoTrack.load(.preferredTransform)
-            let correctedSize = naturalSize.applying(transform)
+            let naturalSize = try await firstTrack.load(.naturalSize)
+            let transform   = try await firstTrack.load(.preferredTransform)
+            let corrected   = naturalSize.applying(transform)
+            print("🎬 Video: \(abs(corrected.width).rounded())×\(abs(corrected.height).rounded())")
 
-            print("🎬 Video yüklendi: \(abs(correctedSize.width))x\(abs(correctedSize.height))")
-
-            // Player item oluştur – donanım decode tercih et
             let item = AVPlayerItem(asset: asset)
-            item.preferredForwardBufferDuration = 5.0 // 5 sn buffer
+            item.preferredForwardBufferDuration = 5.0
             item.audioTimePitchAlgorithm = .spectral
 
-            // Piksel format tercihi – Apple Silicon Media Engine uyumlu
-            let outputSettings: [String: Any] = [
-                kCVPixelBufferPixelFormatTypeKey as String:
-                    kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
-                kCVPixelBufferMetalCompatibilityKey as String: true
-            ]
-
             await MainActor.run {
-                self.playerItem = item
-                self.duration = CMTimeGetSeconds(duration)
+                self.templateItem = item
+                self.duration = CMTimeGetSeconds(dur)
 
-                if self.player == nil {
-                    self.player = AVPlayer(playerItem: item)
-                } else {
-                    self.player?.replaceCurrentItem(with: item)
-                }
+                self.teardown()
 
-                // Sessiz oynat – arka plan videosu
-                self.player?.isMuted = true
-                self.player?.allowsExternalPlayback = false
+                let qp = AVQueuePlayer()
+                qp.isMuted = true
+                qp.allowsExternalPlayback = false
 
-                // Playback rate uygula
-                self.player?.rate = self.playbackRate
+                // AVPlayerLooper – seamless sonsuz döngü (flash yok)
+                let looper = AVPlayerLooper(player: qp, templateItem: item)
+                self.queuePlayer = qp
+                self.playerLooper = looper
 
-                // Sonsuz loop + fade setup
-                self.setupLooping()
+                // playerLayer varsa yeni player'ı bağla
+                self.playerLayer?.player = qp
 
-                // Zaman takibi
+                qp.rate = self.playbackRate
+                self.isPlaying = true
+
                 self.setupTimeObserver()
-
                 self.isLoading = false
             }
 
@@ -105,132 +90,66 @@ final class VideoPlayerEngine: ObservableObject {
         }
     }
 
-    // MARK: - Loop Points
-
-    func setLoopPoints(start: Double?, end: Double?) {
-        if let s = start {
-            loopStart = CMTime(seconds: s, preferredTimescale: 600)
-        }
-        if let e = end {
-            loopEnd = CMTime(seconds: e, preferredTimescale: 600)
-        }
-
-        // Loop boundary observer güncelle
-        setupLooping()
-    }
-
     // MARK: - Playback Control
 
+    /// player'a dışarıdan erişim gereken yerler için (DesktopWindow)
+    var player: AVQueuePlayer? { queuePlayer }
+
     func play() {
-        player?.rate = playbackRate
+        queuePlayer?.rate = playbackRate
         isPlaying = true
     }
 
     func pause() {
-        player?.pause()
+        queuePlayer?.pause()
         isPlaying = false
     }
 
     func stop() {
-        fadeTimer?.invalidate()
-        player?.pause()
-        player?.seek(to: loopStart)
+        teardown()
         isPlaying = false
-        removeObservers()
     }
 
     func seek(to time: Double) {
         let cmTime = CMTime(seconds: time, preferredTimescale: 600)
-        player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+        queuePlayer?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
-    /// Oynatma hızını değiştir (0.25 slow-mo, 0.5 yavaş, 1.0 normal)
     func setPlaybackRate(_ rate: Float) {
         playbackRate = rate
-        if isPlaying {
-            player?.rate = rate
-        }
+        if isPlaying { queuePlayer?.rate = rate }
     }
 
-    // MARK: - Private
+    // MARK: - Fade (giriş/çıkış görsel efekti)
 
-    private func setupLooping() {
-        // Önceki observer'ları temizle
-        if let observer = loopObserver {
-            player?.removeTimeObserver(observer)
-            loopObserver = nil
-        }
-        fadeTimer?.invalidate()
-        cancellables.removeAll()
-
-        guard let player else { return }
-
-        // AVPlayerItem bitişini dinle → fade geçişli loop
-        NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime, object: playerItem)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.loopWithFade()
-            }
-            .store(in: &cancellables)
-
-        // Sona yaklaşınca fade başlat
-        setupFadeBoundary()
+    func fadeIn(duration: Double? = nil) {
+        fadeLayer(toOpacity: 1, duration: duration ?? fadeDuration)
     }
 
-    /// Video sonuna fadeOutStart saniye kala CALayer opacity'yi düşür
-    private func setupFadeBoundary() {
-        guard let player, duration > 0 else { return }
-
-        let endSeconds = loopEnd == .positiveInfinity ? duration : CMTimeGetSeconds(loopEnd)
-        let fadeStartSeconds = max(0, endSeconds - fadeOutStart)
-        let fadeTime = CMTime(seconds: fadeStartSeconds, preferredTimescale: 600)
-
-        loopObserver = player.addBoundaryTimeObserver(
-            forTimes: [NSValue(time: fadeTime)],
-            queue: .main
-        ) { [weak self] in
-            guard let self else { return }
-            Task { @MainActor in
-                self.fadeLayer(toOpacity: 0, duration: self.fadeDuration)
-            }
-        }
+    func fadeOut(duration: Double? = nil) {
+        fadeLayer(toOpacity: 0, duration: duration ?? fadeDuration)
     }
 
-    /// Fade out → seek başa → fade in
-    private func loopWithFade() {
-        let outDuration = min(fadeDuration, 0.6)
-        fadeLayer(toOpacity: 0, duration: outDuration)
-        // fade-out bitmeden seek + play başlatma
-        DispatchQueue.main.asyncAfter(deadline: .now() + outDuration + 0.05) { [weak self] in
-            guard let self else { return }
-            self.player?.seek(to: self.loopStart, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-                guard let self else { return }
-                self.player?.rate = self.playbackRate
-                self.fadeLayer(toOpacity: 1, duration: self.fadeDuration)
-            }
-        }
-    }
-
-    /// AVPlayerLayer CALayer opacity animasyonu
     private func fadeLayer(toOpacity opacity: Float, duration: Double) {
         guard let layer = playerLayer else { return }
         let anim = CABasicAnimation(keyPath: "opacity")
         anim.fromValue = layer.opacity
-        anim.toValue = opacity
-        anim.duration = duration
-        anim.fillMode = .forwards
+        anim.toValue   = opacity
+        anim.duration  = duration
+        anim.fillMode  = .forwards
         anim.isRemovedOnCompletion = false
         layer.add(anim, forKey: "dinoFade")
         layer.opacity = opacity
     }
 
+    // MARK: - Private
+
     private func setupTimeObserver() {
         if let observer = timeObserver {
-            player?.removeTimeObserver(observer)
+            queuePlayer?.removeTimeObserver(observer)
         }
-
         let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
-        timeObserver = player?.addPeriodicTimeObserver(
+        timeObserver = queuePlayer?.addPeriodicTimeObserver(
             forInterval: interval,
             queue: .main
         ) { [weak self] time in
@@ -238,17 +157,21 @@ final class VideoPlayerEngine: ObservableObject {
         }
     }
 
-    private func removeObservers() {
-        if let observer = loopObserver {
-            player?.removeTimeObserver(observer)
-            loopObserver = nil
-        }
+    private func teardown() {
         if let observer = timeObserver {
-            player?.removeTimeObserver(observer)
+            queuePlayer?.removeTimeObserver(observer)
             timeObserver = nil
         }
+        playerLooper?.disableLooping()
+        playerLooper = nil
+        queuePlayer?.pause()
+        queuePlayer = nil
+        templateItem = nil
         cancellables.removeAll()
     }
 
-    // Not: WallpaperEngine stop()/clearContent() ile removeObservers'ı explicit çağırır
+    deinit {
+        playerLooper?.disableLooping()
+        queuePlayer?.pause()
+    }
 }

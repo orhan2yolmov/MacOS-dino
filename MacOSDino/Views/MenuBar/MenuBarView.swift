@@ -27,6 +27,32 @@ struct MenuBarView: View {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    private func openSettingsWindow() {
+        // Önce mevcut ayarlar penceresini ara
+        if let existing = NSApp.windows.first(where: { $0.title == "MacOS-Dino Ayarlar" }) {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 420),
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.center()
+        window.title = "MacOS-Dino Ayarlar"
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(
+            rootView: SettingsView()
+                .environmentObject(WallpaperEngine.shared)
+                .environmentObject(AuthService.shared)
+                .environmentObject(SubscriptionManager.shared)
+        )
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // ── Başlık
@@ -264,8 +290,7 @@ struct MenuBarView: View {
             }
 
             MenuActionRow(icon: "gear", label: "Ayarlar...", color: .gray) {
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                NSApp.activate(ignoringOtherApps: true)
+                openSettingsWindow()
             }
 
             MenuActionRow(icon: "power", label: "MacOS-Dino'dan Çık", color: .red.opacity(0.8)) {

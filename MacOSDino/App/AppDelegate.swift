@@ -48,6 +48,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
 
+        // Ekran kilidi (screensaver / lock screen) – pause
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(screenLocked),
+            name: NSWorkspace.screensaverDidLaunchNotification,
+            object: nil
+        )
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(screenUnlocked),
+            name: NSWorkspace.screensaverDidStopNotification,
+            object: nil
+        )
+
         print("🦕 MacOS-Dino başlatıldı!")
     }
 
@@ -81,6 +95,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func systemDidWake(_ notification: Notification) {
+        Task { @MainActor in
+            WallpaperEngine.shared.resume()
+        }
+    }
+
+    @objc private func screenLocked(_ notification: Notification) {
+        Task { @MainActor in
+            WallpaperEngine.shared.pause()
+        }
+    }
+
+    @objc private func screenUnlocked(_ notification: Notification) {
         Task { @MainActor in
             WallpaperEngine.shared.resume()
         }

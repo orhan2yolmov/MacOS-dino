@@ -73,26 +73,28 @@ final class DesktopWindow: NSWindow {
 
     // MARK: - Content Attachment
 
-    /// Video oynatıcı ekle (AVFoundation + CAMetalLayer render)
+    /// Video oynatıcı ekle – AVQueuePlayer + AVPlayerLooper seamless loop
     func attachVideoPlayer(_ engine: VideoPlayerEngine) {
         clearContent()
 
-        guard let player = engine.player else { return }
-
         contentView?.wantsLayer = true
 
-        // Siyah arka plan layer – fade esnasında masaüstü görünmesin
+        // Siyah arka plan – fade/seek esnasında masaüstü görünmesin
         let blackLayer = CALayer()
         blackLayer.backgroundColor = CGColor(red: 0, green: 0, blue: 0, alpha: 1)
         blackLayer.frame = contentView?.bounds ?? frame
+        blackLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
         contentView?.layer?.addSublayer(blackLayer)
 
-        let playerLayer = AVPlayerLayer(player: player)
+        // AVPlayerLayer – queuePlayer henüz yüklenmemiş olabilir,
+        // engine.playerLayer?.player = qp ile loadVideo sonrası güncellenir
+        let playerLayer = AVPlayerLayer(player: engine.queuePlayer)
         playerLayer.videoGravity = .resizeAspectFill
         playerLayer.frame = contentView?.bounds ?? frame
         playerLayer.contentsScale = displayConfig.scaleFactor
+        playerLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
 
-        // Fade geçişi için engine'e layer referansını ver
+        // Fade için engine'e layer referansını ver
         engine.playerLayer = playerLayer
 
         contentView?.layer?.addSublayer(playerLayer)

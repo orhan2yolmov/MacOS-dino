@@ -142,14 +142,9 @@ final class WallpaperEngine: ObservableObject {
             switch wallpaper.contentType {
             case .video:
                 let player = VideoPlayerEngine()
-                await player.loadVideo(url: wallpaper.localURL ?? wallpaper.remoteURL)
-                player.setLoopPoints(
-                    start: wallpaper.loopStartTime,
-                    end: wallpaper.loopEndTime
-                )
                 window.attachVideoPlayer(player)
                 videoPlayers[id] = player
-                player.play()
+                await player.loadVideo(url: wallpaper.localURL ?? wallpaper.remoteURL)
 
             case .metalShader:
                 if let shaderName = wallpaper.shaderName {
@@ -227,6 +222,21 @@ final class WallpaperEngine: ObservableObject {
         let window = DesktopWindow(display: display)
         window.configure()
         desktopWindows[display.displayID] = window
+
+        // Pencere görünürlüğü değişince pause/resume
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification,
+            object: window,
+            queue: .main
+        ) { [weak self, weak window] _ in
+            guard let self, self.pauseWhenOccluded, let win = window else { return }
+            let visible = win.occlusionState.contains(.visible)
+            if visible {
+                self.videoPlayers.values.forEach { $0.play() }
+            } else {
+                self.videoPlayers.values.forEach { $0.pause() }
+            }
+        }
     }
 
     private func setupOcclusionDetection() {
