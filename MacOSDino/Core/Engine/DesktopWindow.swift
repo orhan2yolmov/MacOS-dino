@@ -12,7 +12,8 @@ final class DesktopWindow: NSWindow {
     // MARK: - Properties
 
     let displayConfig: DisplayConfiguration
-    private var videoPlayerLayer: AVPlayerLayer?
+    private var videoPlayerLayerA: AVPlayerLayer?
+    private var videoPlayerLayerB: AVPlayerLayer?
     private var metalView: MTKView?
     private var webView: WKWebView?
     private var imageView: NSImageView?
@@ -37,43 +38,32 @@ final class DesktopWindow: NSWindow {
     // MARK: - Configuration
 
     func configure() {
-        // Pencere katmanı: Masaüstü ikonlarının ALTINDA, wallpaper'ın ÜSTÜNDE
-        // kCGDesktopWindowLevel = 20 olarak tanımlı, biz 19 kullanıyoruz
         level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) - 1)
-
-        // Şeffaf ve gölgesiz
         hasShadow = false
         isOpaque = false
         backgroundColor = .clear
-
-        // Mouse event'leri yoksay – ikonlara tıklama çalışsın
         ignoresMouseEvents = true
-
-        // Pencere yönetim özellikleri (canBecomeKey/Main sınıfta override edildi)
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
 
-        // Tüm Space'lerde görünsün, pencere döngüsüne girmesin
         collectionBehavior = [
-            .canJoinAllSpaces,      // Tüm masaüstlerinde
-            .stationary,            // Space değişiminde yerinde kalsın
-            .ignoresCycle,          // Cmd+Tab'da görünmesin
-            .fullScreenAuxiliary    // Fullscreen modunda yardımcı
+            .canJoinAllSpaces,
+            .stationary,
+            .ignoresCycle,
+            .fullScreenAuxiliary
         ]
 
-        // Retina desteği
         if let contentView = contentView {
             contentView.wantsLayer = true
             contentView.layer?.contentsScale = displayConfig.scaleFactor
         }
 
-        // Pencereyi ekranda göster
         orderFront(nil)
     }
 
     // MARK: - Content Attachment
 
-    /// Video oynatıcı ekle – AVQueuePlayer + AVPlayerLooper seamless loop
+    /// Video oynatıcı ekle – İki AVPlayerLayer ile crossfade loop desteği
     func attachVideoPlayer(_ engine: VideoPlayerEngine) {
         clearContent()
 
@@ -86,27 +76,39 @@ final class DesktopWindow: NSWindow {
         blackLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
         contentView?.layer?.addSublayer(blackLayer)
 
-        // AVPlayerLayer – queuePlayer henüz yüklenmemiş olabilir,
-        // engine.playerLayer?.player = qp ile loadVideo sonrası güncellenir
-        let playerLayer = AVPlayerLayer(player: engine.queuePlayer)
-        playerLayer.videoGravity = .resizeAspectFill
-        playerLayer.frame = contentView?.bounds ?? frame
-        playerLayer.contentsScale = displayConfig.scaleFactor
-        playerLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+        // Layer A – Birincil oynatıcı
+        let layerA = AVPlayerLayer()
+        layerA.videoGravity = .resizeAspectFill
+        layerA.frame = contentView?.bounds ?? frame
+        layerA.contentsScale = displayConfig.scaleFactor
+        layerA.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+        layerA.opacity = 1
+        contentView?.layer?.addSublayer(layerA)
+        self.videoPlayerLayerA = layerA
 
-        // Fade için engine'e layer referansını ver
-        engine.playerLayer = playerLayer
+        // Layer B – Crossfade karşılığı
+        let layerB = AVPlayerLayer()
+        layerB.videoGravity = .resizeAspectFill
+        layerB.frame = contentView?.bounds ?? frame
+        layerB.contentsScale = displayConfig.scaleFactor
+        layerB.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+        layerB.opacity = 0
+        contentView?.layer?.addSublayer(layerB)
+        self.videoPlayerLayerB = layerB
 
-        contentView?.layer?.addSublayer(playerLayer)
-        self.videoPlayerLayer = playerLayer
+        // Engine'e iki layer referansını ver
+        engine.playerLayerA = layerA
+        engine.playerLayerB = layerB
 
         // Frame değişikliklerinde boyutu güncelle
         NotificationCenter.default.addObserver(
             forName: NSView.frameDidChangeNotification,
             object: contentView,
             queue: .main
-        ) { [weak self, weak playerLayer] _ in
-            playerLayer?.frame = self?.contentView?.bounds ?? .zero
+        ) { [weak self, weak layerA, weak layerB] _ in
+            let bounds = self?.contentView?.bounds ?? .zero
+            layerA?.frame = bounds
+            layerB?.frame = bounds
         }
     }
 
@@ -146,7 +148,6 @@ final class DesktopWindow: NSWindow {
         imgView.imageScaling = .scaleProportionallyUpOrDown
         imgView.animates = true
 
-        // Async yükle
         Task {
             if url.isFileURL {
                 imgView.image = NSImage(contentsOf: url)
@@ -163,8 +164,10 @@ final class DesktopWindow: NSWindow {
 
     /// Tüm içeriği temizle
     func clearContent() {
-        videoPlayerLayer?.removeFromSuperlayer()
-        videoPlayerLayer = nil
+        videoPlayerLayerA?.removeFromSuperlayer()
+        videoPlayerLayerA = nil
+        videoPlayerLayerB?.removeFromSuperlayer()
+        videoPlayerLayerB = nil
 
         metalView?.removeFromSuperview()
         metalView = nil

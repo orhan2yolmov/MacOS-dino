@@ -1,7 +1,7 @@
 // VideoPlayerEngine.swift
-// MacOS-Dino – AVFoundation seamless loop motoru
-// AVQueuePlayer + AVPlayerLooper → boşluksuz, flash'sız döngü
-// Default: 0.4x slow-motion (macOS Aerial benzeri)
+// MacOS-Dino – AVFoundation Crossfade Loop Motoru
+// İki AVPlayer arasında crossfade yaparak kesintisiz, yumuşak döngü
+// Default: 0.35x slow-motion (macOS Aerial benzeri akıcı hareket)
 
 import AVFoundation
 import CoreVideo
@@ -16,20 +16,30 @@ final class VideoPlayerEngine: ObservableObject {
     @Published var isLoading = false
     @Published var duration: Double = 0
     @Published var currentTime: Double = 0
-    @Published var playbackRate: Float = 0.4  // macOS Aerial gibi yavaş
+    @Published var playbackRate: Float = 0.35
 
-    // Fade için playerLayer referansı
-    weak var playerLayer: AVPlayerLayer?
+    // İki AVPlayerLayer → crossfade
+    weak var playerLayerA: AVPlayerLayer?
+    weak var playerLayerB: AVPlayerLayer?
 
-    // AVQueuePlayer + Looper = seamless, flash'sız döngü
-    private(set) var queuePlayer: AVQueuePlayer?
-    private var playerLooper: AVPlayerLooper?
-    private var templateItem: AVPlayerItem?
+    // Dışarıdan erişim (DesktopWindow)
+    var player: AVPlayer? { activePlayer }
+    var playerLayer: AVPlayerLayer? {
+        get { playerLayerA }
+        set { playerLayerA = newValue }
+    }
 
+    private var activePlayer: AVPlayer?
+    private var standbyPlayer: AVPlayer?
+    private var videoAsset: AVURLAsset?
     private var timeObserver: Any?
+    private var boundaryObserver: Any?
     private var cancellables = Set<AnyCancellable>()
+    private var isLayerA = true  // hangi layer aktif
 
-    var fadeDuration: Double = 1.2
+    // Crossfade ayarları – kullanıcı değiştirebilir
+    var crossfadeDuration: Double = 2.5  // saniye – yavaş, yumuşak geçiş
+    var crossfadeStartBefore: Double = 3.0  // sona kaç sn kala crossfade başlasın
 
     // MARK: - Video Loading
 
@@ -42,7 +52,7 @@ final class VideoPlayerEngine: ObservableObject {
 
         do {
             let tracks = try await asset.loadTracks(withMediaType: .video)
-            let dur    = try await asset.load(.duration)
+            let dur = try await asset.load(.duration)
 
             guard let firstTrack = tracks.first else {
                 print("⚠️ Video track yok: \(url)")
@@ -51,35 +61,36 @@ final class VideoPlayerEngine: ObservableObject {
             }
 
             let naturalSize = try await firstTrack.load(.naturalSize)
-            let transform   = try await firstTrack.load(.preferredTransform)
-            let corrected   = naturalSize.applying(transform)
+            let transform = try await firstTrack.load(.preferredTransform)
+            let corrected = naturalSize.applying(transform)
             print("🎬 Video: \(abs(corrected.width).rounded())×\(abs(corrected.height).rounded())")
 
-            let item = AVPlayerItem(asset: asset)
-            item.preferredForwardBufferDuration = 5.0
-            item.audioTimePitchAlgorithm = .spectral
-
             await MainActor.run {
-                self.templateItem = item
+                self.videoAsset = asset
                 self.duration = CMTimeGetSeconds(dur)
-
                 self.teardown()
 
-                let qp = AVQueuePlayer()
-                qp.isMuted = true
-                qp.allowsExternalPlayback = false
+                // İki player oluştur
+                let itemA = AVPlayerItem(asset: asset)
+                itemA.preferredForwardBufferDuration = 5.0
+                itemA.audioTimePitchAlgorithm = .spectral
 
-                // AVPlayerLooper – seamless sonsuz döngü (flash yok)
-                let looper = AVPlayerLooper(player: qp, templateItem: item)
-                self.queuePlayer = qp
-                self.playerLooper = looper
+                let playerA = AVPlayer(playerItem: itemA)
+                playerA.isMuted = true
+                playerA.allowsExternalPlayback = false
 
-                // playerLayer varsa yeni player'ı bağla
-                self.playerLayer?.player = qp
+                self.activePlayer = playerA
+                self.isLayerA = true
 
-                qp.rate = self.playbackRate
+                // Layer'a bağla
+                self.playerLayerA?.player = playerA
+
+                // Oynat
+                playerA.rate = self.playbackRate
                 self.isPlaying = true
 
+                // Crossfade boundary kur
+                self.setupCrossfadeBoundary()
                 self.setupTimeObserver()
                 self.isLoading = false
             }
@@ -92,16 +103,14 @@ final class VideoPlayerEngine: ObservableObject {
 
     // MARK: - Playback Control
 
-    /// player'a dışarıdan erişim gereken yerler için (DesktopWindow)
-    var player: AVQueuePlayer? { queuePlayer }
-
     func play() {
-        queuePlayer?.rate = playbackRate
+        activePlayer?.rate = playbackRate
         isPlaying = true
     }
 
     func pause() {
-        queuePlayer?.pause()
+        activePlayer?.pause()
+        standbyPlayer?.pause()
         isPlaying = false
     }
 
@@ -112,66 +121,168 @@ final class VideoPlayerEngine: ObservableObject {
 
     func seek(to time: Double) {
         let cmTime = CMTime(seconds: time, preferredTimescale: 600)
-        queuePlayer?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+        activePlayer?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
     func setPlaybackRate(_ rate: Float) {
         playbackRate = rate
-        if isPlaying { queuePlayer?.rate = rate }
+        if isPlaying {
+            activePlayer?.rate = rate
+        }
     }
 
-    // MARK: - Fade (giriş/çıkış görsel efekti)
+    // MARK: - Crossfade Loop
+
+    private func setupCrossfadeBoundary() {
+        // Önceki observer temizle
+        if let obs = boundaryObserver {
+            activePlayer?.removeTimeObserver(obs)
+            boundaryObserver = nil
+        }
+
+        guard let player = activePlayer, duration > crossfadeStartBefore + 1 else {
+            // Video çok kısa – basit loop
+            setupSimpleLoop()
+            return
+        }
+
+        let fadeStart = duration - crossfadeStartBefore
+        let fadeTime = CMTime(seconds: fadeStart, preferredTimescale: 600)
+
+        boundaryObserver = player.addBoundaryTimeObserver(
+            forTimes: [NSValue(time: fadeTime)],
+            queue: .main
+        ) { [weak self] in
+            self?.performCrossfade()
+        }
+    }
+
+    /// Basit loop (kısa videolar için – AVPlayerLooper)
+    private func setupSimpleLoop() {
+        NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime, object: activePlayer?.currentItem)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.activePlayer?.seek(to: .zero)
+                self?.activePlayer?.rate = self?.playbackRate ?? 0.35
+            }
+            .store(in: &cancellables)
+    }
+
+    /// Asıl crossfade – standby player hazırla, iki layer'ı aynı anda fade et
+    private func performCrossfade() {
+        guard let asset = videoAsset else { return }
+
+        // Standby player oluştur – baştan başlayacak
+        let newItem = AVPlayerItem(asset: asset)
+        newItem.preferredForwardBufferDuration = 5.0
+        newItem.audioTimePitchAlgorithm = .spectral
+
+        let newPlayer = AVPlayer(playerItem: newItem)
+        newPlayer.isMuted = true
+        newPlayer.allowsExternalPlayback = false
+
+        // Hangi layer standby?
+        let standbyLayer = isLayerA ? playerLayerB : playerLayerA
+        let activeLayer = isLayerA ? playerLayerA : playerLayerB
+
+        standbyLayer?.player = newPlayer
+        standbyLayer?.opacity = 0
+
+        // Yeni player'ı başlat
+        newPlayer.rate = playbackRate
+        self.standbyPlayer = newPlayer
+
+        // Crossfade animasyonu
+        let dur = crossfadeDuration
+
+        // Standby layer fade-in
+        animateOpacity(layer: standbyLayer, from: 0, to: 1, duration: dur)
+        // Active layer fade-out
+        animateOpacity(layer: activeLayer, from: 1, to: 0, duration: dur)
+
+        // Crossfade bittikten sonra player'ları swap et
+        DispatchQueue.main.asyncAfter(deadline: .now() + dur + 0.1) { [weak self] in
+            guard let self else { return }
+
+            // Eski observer'ı temizle
+            if let obs = self.boundaryObserver {
+                self.activePlayer?.removeTimeObserver(obs)
+                self.boundaryObserver = nil
+            }
+
+            // Eski player'ı durdur
+            self.activePlayer?.pause()
+
+            // Swap
+            self.activePlayer = newPlayer
+            self.standbyPlayer = nil
+            self.isLayerA.toggle()
+
+            // Yeni crossfade boundary kur
+            self.setupCrossfadeBoundary()
+            self.setupTimeObserver()
+        }
+    }
+
+    private func animateOpacity(layer: CALayer?, from: Float, to: Float, duration: Double) {
+        guard let layer else { return }
+        let anim = CABasicAnimation(keyPath: "opacity")
+        anim.fromValue = from
+        anim.toValue = to
+        anim.duration = duration
+        anim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        anim.fillMode = .forwards
+        anim.isRemovedOnCompletion = false
+        layer.add(anim, forKey: "crossfade_\(to)")
+        layer.opacity = to
+    }
+
+    // MARK: - Convenience fade
 
     func fadeIn(duration: Double? = nil) {
-        fadeLayer(toOpacity: 1, duration: duration ?? fadeDuration)
+        animateOpacity(layer: isLayerA ? playerLayerA : playerLayerB, from: 0, to: 1, duration: duration ?? crossfadeDuration)
     }
 
     func fadeOut(duration: Double? = nil) {
-        fadeLayer(toOpacity: 0, duration: duration ?? fadeDuration)
-    }
-
-    private func fadeLayer(toOpacity opacity: Float, duration: Double) {
-        guard let layer = playerLayer else { return }
-        let anim = CABasicAnimation(keyPath: "opacity")
-        anim.fromValue = layer.opacity
-        anim.toValue   = opacity
-        anim.duration  = duration
-        anim.fillMode  = .forwards
-        anim.isRemovedOnCompletion = false
-        layer.add(anim, forKey: "dinoFade")
-        layer.opacity = opacity
+        animateOpacity(layer: isLayerA ? playerLayerA : playerLayerB, from: 1, to: 0, duration: duration ?? crossfadeDuration)
     }
 
     // MARK: - Private
 
     private func setupTimeObserver() {
-        if let observer = timeObserver {
-            queuePlayer?.removeTimeObserver(observer)
+        if let obs = timeObserver {
+            activePlayer?.removeTimeObserver(obs)
         }
         let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
-        timeObserver = queuePlayer?.addPeriodicTimeObserver(
+        timeObserver = activePlayer?.addPeriodicTimeObserver(
             forInterval: interval,
             queue: .main
         ) { [weak self] time in
-            self?.currentTime = CMTimeGetSeconds(time)
+            Task { @MainActor in
+                self?.currentTime = CMTimeGetSeconds(time)
+            }
         }
     }
 
     private func teardown() {
-        if let observer = timeObserver {
-            queuePlayer?.removeTimeObserver(observer)
+        if let obs = boundaryObserver {
+            activePlayer?.removeTimeObserver(obs)
+            boundaryObserver = nil
+        }
+        if let obs = timeObserver {
+            activePlayer?.removeTimeObserver(obs)
             timeObserver = nil
         }
-        playerLooper?.disableLooping()
-        playerLooper = nil
-        queuePlayer?.pause()
-        queuePlayer = nil
-        templateItem = nil
+        activePlayer?.pause()
+        standbyPlayer?.pause()
+        activePlayer = nil
+        standbyPlayer = nil
+        videoAsset = nil
         cancellables.removeAll()
     }
 
     deinit {
-        playerLooper?.disableLooping()
-        queuePlayer?.pause()
+        activePlayer?.pause()
+        standbyPlayer?.pause()
     }
 }

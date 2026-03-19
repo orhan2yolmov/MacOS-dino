@@ -21,6 +21,22 @@ final class WallpaperEngine: ObservableObject {
     @Published var memoryUsage: Double = 0.0
     @Published var fps: Double = 0.0
 
+    // MARK: - Playback Settings (kullanıcı ayarlanabilir)
+
+    @Published var playbackSpeed: Float = 0.35 {
+        didSet {
+            UserDefaults.standard.set(playbackSpeed, forKey: "MacOSDino.playbackSpeed")
+            videoPlayers.values.forEach { $0.setPlaybackRate(playbackSpeed) }
+        }
+    }
+
+    @Published var crossfadeDuration: Double = 2.5 {
+        didSet {
+            UserDefaults.standard.set(crossfadeDuration, forKey: "MacOSDino.crossfadeDuration")
+            videoPlayers.values.forEach { $0.crossfadeDuration = crossfadeDuration }
+        }
+    }
+
     // MARK: - Sub-Engines
 
     private(set) var desktopWindows: [CGDirectDisplayID: DesktopWindow] = [:]
@@ -49,7 +65,17 @@ final class WallpaperEngine: ObservableObject {
     @Published var pauseWhenOccluded: Bool = true
     @Published var activeShaderName: String? = nil
 
-    private init() {}
+    private init() {
+        // Kayıtlı hız ayarlarını yükle
+        let savedSpeed = UserDefaults.standard.float(forKey: "MacOSDino.playbackSpeed")
+        if savedSpeed > 0 {
+            playbackSpeed = savedSpeed
+        }
+        let savedFade = UserDefaults.standard.double(forKey: "MacOSDino.crossfadeDuration")
+        if savedFade > 0 {
+            crossfadeDuration = savedFade
+        }
+    }
 
     // MARK: - Lifecycle
 
@@ -57,21 +83,14 @@ final class WallpaperEngine: ObservableObject {
         guard !isInitialized else { return }
         isInitialized = true
 
-        // Monitörleri keşfet
         await refreshDisplays()
 
-        // Her monitör için desktop window oluştur
         for display in activeDisplays {
             await setupDesktopWindow(for: display)
         }
 
-        // Oklüzyon dedektörünü başlat
         setupOcclusionDetection()
-
-        // Performans izlemeyi başlat
         setupPerformanceMonitoring()
-
-        // Kayıtlı wallpaper'ı yükle
         await loadSavedWallpaper()
 
         isRunning = true
@@ -96,19 +115,16 @@ final class WallpaperEngine: ObservableObject {
     }
 
     func handleScreenChange() async {
-        // Monitör eklendi/çıkarıldı – yeniden kurulum
         let oldDisplays = Set(desktopWindows.keys)
         await refreshDisplays()
         let newDisplayIDs = Set(activeDisplays.map { $0.displayID })
 
-        // Kaldırılan monitörleri temizle
         for removedID in oldDisplays.subtracting(newDisplayIDs) {
             desktopWindows[removedID]?.close()
             desktopWindows.removeValue(forKey: removedID)
             videoPlayers.removeValue(forKey: removedID)
         }
 
-        // Yeni monitörlere window ekle
         for display in activeDisplays where !oldDisplays.contains(display.displayID) {
             await setupDesktopWindow(for: display)
             if let wallpaper = currentWallpaper {
@@ -118,7 +134,6 @@ final class WallpaperEngine: ObservableObject {
     }
 
     func handleSpaceChange() {
-        // Space değiştiğinde wallpaper'ın görünürlüğünü kontrol et
         if pauseWhenOccluded {
             occlusionDetector.checkNow()
         }
@@ -142,6 +157,9 @@ final class WallpaperEngine: ObservableObject {
             switch wallpaper.contentType {
             case .video:
                 let player = VideoPlayerEngine()
+                player.playbackRate = playbackSpeed
+                player.crossfadeDuration = crossfadeDuration
+                // Önce layer'ları bağla, sonra video yükle
                 window.attachVideoPlayer(player)
                 videoPlayers[id] = player
                 await player.loadVideo(url: wallpaper.localURL ?? wallpaper.remoteURL)
@@ -157,19 +175,15 @@ final class WallpaperEngine: ObservableObject {
                 }
 
             case .htmlWidget:
-                // WKWebView ile HTML5 live widget
                 window.attachWebView(url: wallpaper.remoteURL)
 
             case .staticImage:
-                // Statik ama parallax/ken-burns efektli
                 window.attachStaticImage(url: wallpaper.localURL ?? wallpaper.remoteURL)
             }
         }
 
-        // Tercihi kaydet
         saveCurrentWallpaper(wallpaper)
 
-        // Analytics
         Task {
             await AnalyticsService.shared.trackEvent(.wallpaperApplied, properties: [
                 "wallpaper_id": wallpaper.id.uuidString,
@@ -223,18 +237,19 @@ final class WallpaperEngine: ObservableObject {
         window.configure()
         desktopWindows[display.displayID] = window
 
-        // Pencere görünürlüğü değişince pause/resume
         NotificationCenter.default.addObserver(
             forName: NSWindow.didChangeOcclusionStateNotification,
             object: window,
             queue: .main
-        ) { [weak self, weak window] _ in
-            guard let self, self.pauseWhenOccluded, let win = window else { return }
-            let visible = win.occlusionState.contains(.visible)
-            if visible {
-                self.videoPlayers.values.forEach { $0.play() }
-            } else {
-                self.videoPlayers.values.forEach { $0.pause() }
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.pauseWhenOccluded else { return }
+                let visible = window.occlusionState.contains(.visible)
+                if visible {
+                    self.videoPlayers.values.forEach { $0.play() }
+                } else {
+                    self.videoPlayers.values.forEach { $0.pause() }
+                }
             }
         }
     }

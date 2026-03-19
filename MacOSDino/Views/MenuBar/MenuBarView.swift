@@ -35,13 +35,15 @@ struct MenuBarView: View {
             return
         }
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 420),
-            styleMask: [.titled, .closable, .miniaturizable],
+            contentRect: NSRect(x: 0, y: 0, width: 680, height: 520),
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.center()
         window.title = "MacOS-Dino Ayarlar"
+        window.titlebarAppearsTransparent = true
+        window.backgroundColor = NSColor(red: 0.063, green: 0.086, blue: 0.133, alpha: 1)
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(
             rootView: SettingsView()
