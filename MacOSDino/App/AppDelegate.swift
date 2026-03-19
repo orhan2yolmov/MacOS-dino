@@ -48,17 +48,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
 
-        // Ekran kilidi (screensaver / lock screen) – pause
-        NSWorkspace.shared.notificationCenter.addObserver(
+        // Ekran kilidi – DistributedNotificationCenter ile
+        DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(screenLocked),
-            name: NSWorkspace.screensaverDidLaunchNotification,
+            name: NSNotification.Name("com.apple.screenIsLocked"),
             object: nil
         )
-        NSWorkspace.shared.notificationCenter.addObserver(
+        DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(screenUnlocked),
-            name: NSWorkspace.screensaverDidStopNotification,
+            name: NSNotification.Name("com.apple.screenIsUnlocked"),
             object: nil
         )
 
