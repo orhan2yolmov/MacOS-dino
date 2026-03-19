@@ -20,36 +20,31 @@ final class WallpaperService {
         ratio: AspectRatio? = nil,
         sortBy: WallpaperSortOption = .hot
     ) async throws -> [Wallpaper] {
+        // Adım 1: Filtreler — PostgrestFilterBuilder üzerinde zincir
         var query = supabase
             .from(SupabaseConfig.Tables.wallpapers)
             .select()
 
-        // Kategori filtresi
         if let category {
             query = query.eq("category", value: category.rawValue)
         }
-
-        // En-boy oranı filtresi
         if let ratio {
             query = query.eq("aspect_ratio", value: ratio.rawValue)
         }
-
-        // Sıralama
-        switch sortBy {
-        case .hot:
-            query = query.order("popularity_score", ascending: false)
-        case .new:
-            query = query.order("created_at", ascending: false)
-        case .featured:
-            query = query.eq("is_featured", value: true).order("created_at", ascending: false)
+        if sortBy == .featured {
+            query = query.eq("is_featured", value: true)
         }
 
-        // Sayfalama
+        // Adım 2: Sıralama + sayfalama + execute — tipleri karıştırmadan zincirle
         let from = page * pageSize
-        let to = from + pageSize - 1
-        query = query.range(from: from, to: to)
+        let to   = from + pageSize - 1
+        let orderColumn = sortBy == .hot ? "popularity_score" : "created_at"
 
-        let wallpapers: [Wallpaper] = try await query.execute().value
+        let wallpapers: [Wallpaper] = try await query
+            .order(orderColumn, ascending: false)
+            .range(from: from, to: to)
+            .execute()
+            .value
         return wallpapers
     }
 

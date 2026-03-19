@@ -5,6 +5,7 @@
 import Foundation
 import IOKit
 import mach
+import QuartzCore
 
 final class PerformanceMonitor {
 

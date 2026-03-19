@@ -29,6 +29,11 @@ final class DesktopWindow: NSWindow {
         )
     }
 
+    // MARK: - NSWindow Overrides
+
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+
     // MARK: - Configuration
 
     func configure() {
@@ -44,9 +49,7 @@ final class DesktopWindow: NSWindow {
         // Mouse event'leri yoksay – ikonlara tıklama çalışsın
         ignoresMouseEvents = true
 
-        // Pencere yönetim özellikleri
-        canBecomeKey = false
-        canBecomeMain = false
+        // Pencere yönetim özellikleri (canBecomeKey/Main sınıfta override edildi)
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
 

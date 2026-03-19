@@ -188,7 +188,5 @@ final class VideoPlayerEngine: ObservableObject {
         cancellables.removeAll()
     }
 
-    deinit {
-        removeObservers()
-    }
+    // Not: WallpaperEngine stop()/clearContent() ile removeObservers'ı explicit çağırır
 }

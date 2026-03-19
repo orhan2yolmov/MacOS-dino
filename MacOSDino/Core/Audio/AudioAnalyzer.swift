@@ -70,7 +70,7 @@ final class AudioAnalyzer: ObservableObject {
         isListening = false
 
         if let setup = fftSetup {
-            vDSP_DFT_Destroy(setup)
+            vDSP_DFT_DestroySetup(setup)
             fftSetup = nil
         }
     }
@@ -158,7 +158,5 @@ final class AudioAnalyzer: ObservableObject {
         return sum / Float(highBin - lowBin + 1)
     }
 
-    deinit {
-        stopListening()
-    }
+    // Not: WallpaperEngine stopListening()'i lifecycle'da explicit çağırır
 }

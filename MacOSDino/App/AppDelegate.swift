@@ -75,10 +75,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func systemWillSleep(_ notification: Notification) {
-        WallpaperEngine.shared.pause()
+        Task { @MainActor in
+            WallpaperEngine.shared.pause()
+        }
     }
 
     @objc private func systemDidWake(_ notification: Notification) {
-        WallpaperEngine.shared.resume()
+        Task { @MainActor in
+            WallpaperEngine.shared.resume()
+        }
     }
 }
