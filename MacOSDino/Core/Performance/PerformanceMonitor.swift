@@ -4,7 +4,7 @@
 
 import Foundation
 import IOKit
-import mach
+import Darwin
 import QuartzCore
 
 final class PerformanceMonitor {
