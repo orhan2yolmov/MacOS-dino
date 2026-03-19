@@ -2,22 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!--
-        MacOS-Dino – Geliştirici / Ad-hoc İmza Entitlements
-        NOT: Bu dosya GitHub Actions CI build için kullanılır.
-             App Store / Notarizasyon için MacOSDino.entitlements kullanın.
-             App Sandbox + Hardened Runtime ad-hoc imzayla çalışmaz.
-    -->
-
     <!-- Ağ erişimi – Supabase API çağrıları için -->
     <key>com.apple.security.network.client</key>
     <true/>
-
-    <!-- Sign In with Apple -->
-    <key>com.apple.developer.applesignin</key>
-    <array>
-        <string>Default</string>
-    </array>
 
     <!-- Dosya erişimi – Video import için -->
     <key>com.apple.security.files.user-selected.read-write</key>
@@ -30,11 +17,6 @@
     <!-- JIT / unsigned memory – Metal shader geçici derlemesi için -->
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
-
-    <!-- Accessibility – Masaüstü pencere yönetimi için -->
-    <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
-    <array>
-        <string>com.apple.dock.fullscreen</string>
-    </array>
 </dict>
 </plist>
+
