@@ -541,7 +541,7 @@ private struct AccountSettingsPanel: View {
                             Text(auth.userProfile?.displayName ?? "Kullanıcı")
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(DinoTheme.textPri)
-                            Text(auth.userProfile?.email ?? "")
+                            Text(auth.userProfile?.email ?? auth.userProfile?.userId.uuidString.prefix(8).description ?? "")
                                 .font(.system(size: 11))
                                 .foregroundStyle(DinoTheme.textDim)
                         }

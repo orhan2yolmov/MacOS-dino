@@ -112,15 +112,12 @@ struct WallpaperDetailView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Text(String(format: "%.1fs", engine.videoPlayers.values.first?.fadeDuration ?? 1.5))
+                    Text(String(format: "%.1fs", engine.crossfadeDuration))
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.purple)
                         .fontWeight(.semibold)
                 }
-                Slider(value: Binding(
-                    get: { engine.videoPlayers.values.first?.fadeDuration ?? 1.5 },
-                    set: { val in engine.videoPlayers.values.forEach { $0.fadeDuration = val } }
-                ), in: 0.3...4.0, step: 0.1)
+                Slider(value: $engine.crossfadeDuration, in: 0.3...5.0, step: 0.1)
                 .tint(.purple)
             }
         }

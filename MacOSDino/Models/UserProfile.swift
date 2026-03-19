@@ -8,6 +8,7 @@ struct UserProfile: Identifiable, Codable {
     let id: UUID
     let userId: UUID
     var displayName: String
+    var email: String?
     var avatarURL: String?
     var proUntil: Date?
     var createdAt: Date
@@ -33,6 +34,7 @@ struct UserProfile: Identifiable, Codable {
         case id
         case userId = "user_id"
         case displayName = "display_name"
+        case email
         case avatarURL = "avatar_url"
         case proUntil = "pro_until"
         case createdAt = "created_at"
