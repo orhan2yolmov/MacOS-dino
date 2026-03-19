@@ -27,21 +27,35 @@ lipo -create \
   -output MacOSDino_universal
 lipo -info MacOSDino_universal
 
-# ── 3. Metal shader'ları derle
+# ── 3. Metal shader'ları derle (opsiyonel – toolchain yoksa atla)
 echo "⚡ Metal shader'lar derleniyor..."
-mkdir -p /tmp/metal_air_dino
-for METAL in MacOSDino/Core/Shaders/*.metal; do
-  BASE=$(basename "$METAL" .metal)
-  xcrun -sdk macosx metal \
-    -mmacosx-version-min=14.0 \
-    -std=metal3.0 \
-    -c "$METAL" \
-    -o "/tmp/metal_air_dino/${BASE}.air"
-  echo "  ✅ $BASE.air"
-done
-AIR_FILES=$(ls /tmp/metal_air_dino/*.air | tr '\n' ' ')
-xcrun -sdk macosx metallib $AIR_FILES -o /tmp/default.metallib
-echo "  ✅ default.metallib → $(du -sh /tmp/default.metallib | cut -f1)"
+METAL_OK=false
+if xcrun -sdk macosx metal --version &>/dev/null; then
+  mkdir -p /tmp/metal_air_dino
+  METAL_FAILED=false
+  for METAL in MacOSDino/Core/Shaders/*.metal; do
+    BASE=$(basename "$METAL" .metal)
+    if xcrun -sdk macosx metal \
+      -mmacosx-version-min=14.0 \
+      -std=metal3.0 \
+      -c "$METAL" \
+      -o "/tmp/metal_air_dino/${BASE}.air" 2>/dev/null; then
+      echo "  ✅ $BASE.air"
+    else
+      METAL_FAILED=true
+    fi
+  done
+  if [ "$METAL_FAILED" = false ] && ls /tmp/metal_air_dino/*.air &>/dev/null; then
+    AIR_FILES=$(ls /tmp/metal_air_dino/*.air | tr '\n' ' ')
+    xcrun -sdk macosx metallib $AIR_FILES -o /tmp/default.metallib
+    echo "  ✅ default.metallib → $(du -sh /tmp/default.metallib | cut -f1)"
+    METAL_OK=true
+  fi
+fi
+if [ "$METAL_OK" = false ]; then
+  echo "  ⚠️  Metal toolchain bulunamadı – shader derleme atlanıyor"
+  echo "     (Kurmak için: xcodebuild -downloadComponent MetalToolchain)"
+fi
 
 # ── 4. .app bundle oluştur
 echo "📁 .app bundle oluşturuluyor..."
@@ -54,7 +68,7 @@ cp MacOSDino_universal "${APP_DIR}/MacOS/MacOSDino"
 chmod +x "${APP_DIR}/MacOS/MacOSDino"
 cp MacOSDino/App/Info.plist "${APP_DIR}/Info.plist"
 printf 'APPL????' > "${APP_DIR}/PkgInfo"
-cp /tmp/default.metallib "${APP_DIR}/Resources/default.metallib"
+cp /tmp/default.metallib "${APP_DIR}/Resources/default.metallib" 2>/dev/null && echo "  ✅ default.metallib eklendi" || echo "  ⚠️  default.metallib yok (shader'lar çalışmayabilir)"
 
 # Assets (isteğe bağlı)
 if [ -d "MacOSDino/Resources/Assets.xcassets" ]; then
