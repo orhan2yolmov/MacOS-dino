@@ -54,20 +54,25 @@ jobs:
       - name: Compile Metal shaders
         run: |
           set -e
-          METAL_SOURCES=$(find MacOSDino/Core/Shaders -name "*.metal" | tr '\n' ' ')
-          echo "🔨 Metal kaynakları: $METAL_SOURCES"
+          mkdir -p /tmp/metal_air
 
-          # .metal → .air (Architecture-Independent Representation)
-          xcrun -sdk macosx metal \
-            -mmacosx-version-min=14.0 \
-            -std=metal3.0 \
-            $METAL_SOURCES \
-            -o /tmp/default.air 2>&1
+          # Adım 1: Her .metal → ayrı .air (LLVM IR)
+          for METAL in MacOSDino/Core/Shaders/*.metal; do
+            BASE=$(basename "$METAL" .metal)
+            echo "  ➤ Derleniyor: $METAL → /tmp/metal_air/${BASE}.air"
+            xcrun -sdk macosx metal \
+              -mmacosx-version-min=14.0 \
+              -std=metal3.0 \
+              -c "$METAL" \
+              -o "/tmp/metal_air/${BASE}.air"
+          done
 
-          # .air → .metallib
+          # Adım 2: Tüm .air dosyaları → default.metallib
+          AIR_FILES=$(ls /tmp/metal_air/*.air | tr '\n' ' ')
+          echo "🔗 Linkleniyor: $AIR_FILES"
           xcrun -sdk macosx metallib \
-            /tmp/default.air \
-            -o /tmp/default.metallib 2>&1
+            $AIR_FILES \
+            -o /tmp/default.metallib
 
           echo "✅ Metal derlendi: $(ls -lh /tmp/default.metallib)"
 
