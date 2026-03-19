@@ -66,9 +66,9 @@ final class VideoPlayerEngine: ObservableObject {
             print("🎬 Video: \(abs(corrected.width).rounded())×\(abs(corrected.height).rounded())")
 
             await MainActor.run {
-                self.videoAsset = asset
                 self.duration = CMTimeGetSeconds(dur)
-                self.teardown()
+                self.teardown()         // teardown videoAsset'i siliyor – ondan SONRA set et
+                self.videoAsset = asset // ← doğru sıra
 
                 // İki player oluştur
                 let itemA = AVPlayerItem(asset: asset)
@@ -153,8 +153,24 @@ final class VideoPlayerEngine: ObservableObject {
             forTimes: [NSValue(time: fadeTime)],
             queue: .main
         ) { [weak self] in
-            self?.performCrossfade()
+            Task { @MainActor in
+                self?.performCrossfade()
+            }
         }
+
+        // Failsafe: video sona gelirse (crossfade tetiklenmediyse) sıfırdan başlat
+        NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime, object: player.currentItem)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.activePlayer === player else { return }
+                    print("⚠️ Failsafe loop tetiklendi")
+                    self.activePlayer?.seek(to: .zero) { _ in
+                        self.activePlayer?.rate = self.playbackRate
+                    }
+                }
+            }
+            .store(in: &cancellables)
     }
 
     /// Basit loop (kısa videolar için – AVPlayerLooper)
@@ -201,14 +217,16 @@ final class VideoPlayerEngine: ObservableObject {
         animateOpacity(layer: activeLayer, from: 1, to: 0, duration: dur)
 
         // Crossfade bittikten sonra player'ları swap et
-        DispatchQueue.main.asyncAfter(deadline: .now() + dur + 0.1) { [weak self] in
-            guard let self else { return }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64((dur + 0.1) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
 
             // Eski observer'ı temizle
             if let obs = self.boundaryObserver {
                 self.activePlayer?.removeTimeObserver(obs)
                 self.boundaryObserver = nil
             }
+            self.cancellables.removeAll()  // eski failsafe subscription temizle
 
             // Eski player'ı durdur
             self.activePlayer?.pause()
