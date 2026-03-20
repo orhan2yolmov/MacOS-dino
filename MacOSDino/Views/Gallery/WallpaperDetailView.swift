@@ -1,308 +1,370 @@
 // WallpaperDetailView.swift
-// MacOS-Dino – Professional Detail Panel (Dark Theme)
-// Display Configuration + Set as Wallpaper + Favorites + Info Grid
+// MacOS-Dino – Right Sidebar Detail Panel (HTML pixel-perfect match)
 
 import SwiftUI
+import AVFoundation
+import CoreMedia
 
 struct WallpaperDetailView: View {
     let wallpaper: Wallpaper
 
     @EnvironmentObject var engine: WallpaperEngine
-    @State private var selectedDisplayID: CGDirectDisplayID?
-    @State private var isFavorite = false
-    @State private var isDownloading = false
+
+    @State private var thumbnail: NSImage?
+    @State private var isFavorite: Bool = false
+    @State private var isSettingWallpaper = false
+    @State private var lastSyncDate = Date()
+
+    // HTML design tokens
+    private let bg          = Color(red: 0.063, green: 0.086, blue: 0.133)  // #101622
+    private let surface     = Color(red: 0.102, green: 0.133, blue: 0.204)  // #1a2234
+    private let borderDark  = Color(red: 0.176, green: 0.227, blue: 0.329)  // #2d3a54
+    private let primary     = Color(red: 0.051, green: 0.349, blue: 0.949)  // #0d59f2
+    private let textSec     = Color(red: 0.6,   green: 0.65,  blue: 0.76)
+    private let textDim     = Color(red: 0.38,  green: 0.44,  blue: 0.56)
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 18) {
-
-                // MARK: - Display Configuration
+            VStack(spacing: 0) {
                 displayConfigSection
-
-                divider
-
-                // MARK: - Wallpaper Info
-                wallpaperInfoSection
-
-                divider
-
-                // MARK: - Info Grid
-                infoGridSection
-
-                divider
-
-                // MARK: - Actions
-                actionSection
-
-                Spacer(minLength: 10)
-
-                // MARK: - Footer
-                footerSection
+                wallpaperDetailsSection
             }
-            .padding(18)
         }
-        .background(Color(red: 0.047, green: 0.067, blue: 0.106))
+        .background(bg)
+        .task(id: wallpaper.id) { await loadThumbnail() }
     }
 
-    private var divider: some View {
-        Rectangle().fill(DinoColors.border.opacity(0.3)).frame(height: 1)
-    }
-
-    // MARK: - Display Configuration
+    // MARK: - Display Configuration Section
 
     private var displayConfigSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("EKRAN YAPILANDIRMASI")
+        VStack(alignment: .leading, spacing: 0) {
+            // Section header
+            Text("DISPLAY CONFIGURATION")
+                .font(.system(size: 10, weight: .bold))
+                .tracking(1.2)
+                .foregroundStyle(textDim)
+                .padding(.bottom, 14)
 
-            // Monitor preview boxes
-            if engine.activeDisplays.isEmpty {
-                HStack(spacing: 8) {
-                    monitorBox(number: 1, label: "Ana Ekran", isMain: true)
-                }
-            } else {
-                HStack(spacing: 8) {
-                    ForEach(Array(engine.activeDisplays.enumerated()), id: \.element.displayID) { index, display in
-                        monitorBox(
-                            number: index + 1,
-                            label: display.name,
-                            isMain: display.isMain,
-                            displayID: display.displayID
-                        )
+            // Monitor preview container (aspect-video)
+            HStack(spacing: 12) {
+                Spacer()
+
+                // Monitor 1 (active with wallpaper)
+                ZStack(alignment: .bottomTrailing) {
+                    // thumbnail background
+                    Group {
+                        if let img = thumbnail {
+                            Image(nsImage: img)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .opacity(0.6)
+                        } else {
+                            Color(primary.opacity(0.1))
+                        }
                     }
-                }
-            }
-
-            // Remove wallpaper button
-            if engine.currentWallpaper?.id == wallpaper.id {
-                Button {
-                    engine.removeWallpaper(for: selectedDisplayID)
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "xmark.rectangle").font(.system(size: 11))
-                        Text("Ekran Wallpaper'ını Kaldır").font(.system(size: 11, weight: .medium))
-                    }
-                    .foregroundStyle(DinoColors.danger)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(DinoColors.danger.opacity(0.1)).overlay(RoundedRectangle(cornerRadius: 8).stroke(DinoColors.danger.opacity(0.3), lineWidth: 1)))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private func monitorBox(number: Int, label: String, isMain: Bool, displayID: CGDirectDisplayID? = nil) -> some View {
-        let isActive = (displayID != nil && selectedDisplayID == displayID) || (displayID == nil)
-        return Button {
-            if let id = displayID { selectedDisplayID = id }
-        } label: {
-            VStack(spacing: 6) {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isActive ? DinoColors.primary.opacity(0.2) : DinoColors.surface)
-                    .frame(height: 50)
+                    .frame(width: 96, height: 64)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
-                            .stroke(isActive ? DinoColors.primary : DinoColors.border.opacity(0.4), lineWidth: isActive ? 1.5 : 1)
+                            .stroke(primary, lineWidth: 2)
                     )
-                    .overlay(
-                        Text("\(number)")
-                            .font(.system(size: 18, weight: .bold, design: .monospaced))
-                            .foregroundStyle(isActive ? DinoColors.primary : DinoColors.textDim)
-                    )
-                Text(label)
-                    .font(.system(size: 9))
-                    .foregroundStyle(DinoColors.textDim)
-                    .lineLimit(1)
+
+                    // "1" badge
+                    Text("1")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 16, height: 16)
+                        .background(Circle().fill(primary))
+                        .offset(x: 6, y: 6)
+                }
+
+                // Monitor 2 (empty)
+                ZStack(alignment: .bottomTrailing) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(surface)
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(borderDark, lineWidth: 1))
+                        Image(systemName: "display")
+                            .font(.system(size: 22, weight: .ultraLight))
+                            .foregroundStyle(textDim.opacity(0.5))
+                    }
+                    .frame(width: 96, height: 64)
+
+                    Text("2")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(textDim)
+                        .offset(x: 4, y: 4)
+                }
+
+                Spacer()
             }
             .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(surface.opacity(0.5))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(borderDark, lineWidth: 1))
+            )
+            .padding(.bottom, 12)
+
+            // Remove button
+            Button {
+                engine.removeWallpaper(for: nil)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "rectangle.slash")
+                        .font(.system(size: 11))
+                    Text("Remove Display Wallpaper")
+                        .font(.system(size: 11))
+                }
+                .foregroundStyle(textSec)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(borderDark, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding(24)
+        .overlay(
+            Rectangle().fill(borderDark).frame(height: 1),
+            alignment: .bottom
+        )
     }
 
-    // MARK: - Wallpaper Info
+    // MARK: - Wallpaper Details Section
 
-    private var wallpaperInfoSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(wallpaper.name)
-                .font(.system(size: 17, weight: .bold))
+    private var wallpaperDetailsSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // Divider
+            Rectangle().fill(borderDark).frame(height: 1).frame(maxWidth: .infinity)
+
+            // Name + badges
+            VStack(alignment: .leading, spacing: 8) {
+                Text(wallpaper.name)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 6) {
+                    if wallpaper.isDownloaded {
+                        badgeView(text: "DOWNLOADED", bg: Color.green.opacity(0.1),
+                                  border: Color.green.opacity(0.2), fg: .green)
+                    }
+                    if wallpaper.isUltraHD || wallpaper.is8K {
+                        badgeView(text: wallpaper.is8K ? "8K" : "4K ULTRA HD",
+                                  bg: surface, border: .clear, fg: textSec)
+                    }
+                }
+            }
+
+            // 2×2 info grid
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                infoCell(label: "Dimensions", value: wallpaper.dimensionsFormatted)
+                infoCell(label: "File Size",  value: wallpaper.fileSizeFormatted)
+                infoCell(label: "Format",     value: wallpaper.contentType.displayName)
+                infoCell(label: "Category",   value: wallpaper.category.displayName)
+            }
+
+            // Set as Wallpaper button
+            Button {
+                setAsWallpaper()
+            } label: {
+                HStack(spacing: 10) {
+                    if isSettingWallpaper {
+                        ProgressView().progressViewStyle(.circular).scaleEffect(0.7).tint(.white)
+                    } else {
+                        Image(systemName: "sparkles.rectangle.stack.fill")
+                            .font(.system(size: 16))
+                    }
+                    Text(isSettingWallpaper ? "Setting…" : "Set as Wallpaper")
+                        .font(.system(size: 15, weight: .bold))
+                }
                 .foregroundStyle(.white)
-                .lineLimit(2)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(primary)
+                        .shadow(color: primary.opacity(0.3), radius: 12, y: 4)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isSettingWallpaper)
 
-            // Badges
-            HStack(spacing: 6) {
-                if wallpaper.isDownloaded {
-                    Badge(text: "İNDİRİLDİ", color: DinoColors.success)
+            // Add to Favorites checkbox row
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { isFavorite.toggle() }
+            } label: {
+                HStack(spacing: 12) {
+                    // Checkbox
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(isFavorite ? primary : Color.clear)
+                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(isFavorite ? primary : borderDark, lineWidth: 1.5))
+                            .frame(width: 18, height: 18)
+                        if isFavorite {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                    }
+
+                    Image(systemName: isFavorite ? "star.fill" : "star")
+                        .font(.system(size: 14))
+                        .foregroundStyle(isFavorite ? primary : textSec)
+
+                    Text("Add to Favorites")
+                        .font(.system(size: 13))
+                        .foregroundStyle(isFavorite ? .white : textSec)
+
+                    Spacer()
                 }
-                if wallpaper.isUltraHD {
-                    Badge(text: "4K ULTRA HD", color: DinoColors.primary)
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(borderDark, lineWidth: 1)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.clear))
+                )
+            }
+            .buttonStyle(.plain)
+
+            // Report link
+            Button {
+                // TODO: report
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 10))
+                    Text("Report this wallpaper")
+                        .font(.system(size: 11))
                 }
-                if wallpaper.is8K {
-                    Badge(text: "8K", color: .purple)
+                .foregroundStyle(textDim)
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+
+            // Version / Help footer
+            VStack(spacing: 10) {
+                Rectangle().fill(borderDark).frame(height: 1).frame(maxWidth: .infinity)
+
+                HStack {
+                    Text("VERSION 4.2.0-STABLE")
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(1.2)
+                        .foregroundStyle(textDim)
+                    Spacer()
+                    Text("LAST SYNC: 2M AGO")
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(1.2)
+                        .foregroundStyle(textDim)
                 }
-                Badge(text: wallpaper.contentType.displayName.uppercased(), color: DinoColors.surface)
+
+                HStack(spacing: 20) {
+                    Button {
+                        // Help Center
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "questionmark.circle")
+                                .font(.system(size: 11))
+                            Text("Help Center")
+                                .font(.system(size: 11))
+                        }
+                        .foregroundStyle(textDim)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        // Feedback
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "envelope")
+                                .font(.system(size: 11))
+                            Text("Feedback")
+                                .font(.system(size: 11))
+                        }
+                        .foregroundStyle(textDim)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .frame(maxWidth: .infinity)
             }
         }
+        .padding(24)
+        .padding(.top, 0)
     }
 
-    // MARK: - Info Grid
+    // MARK: - Helper Views
 
-    private var infoGridSection: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                infoCell(title: "Boyut", value: wallpaper.dimensionsFormatted)
-                Rectangle().fill(DinoColors.border.opacity(0.3)).frame(width: 1)
-                infoCell(title: "Dosya Boyutu", value: wallpaper.fileSizeFormatted)
-            }
-            Rectangle().fill(DinoColors.border.opacity(0.3)).frame(height: 1)
-            HStack(spacing: 0) {
-                infoCell(title: "Format", value: wallpaper.contentType.displayName)
-                Rectangle().fill(DinoColors.border.opacity(0.3)).frame(width: 1)
-                infoCell(title: "Kategori", value: wallpaper.category.displayName)
-            }
-        }
-        .background(RoundedRectangle(cornerRadius: 8).fill(DinoColors.surface).overlay(RoundedRectangle(cornerRadius: 8).stroke(DinoColors.border.opacity(0.3), lineWidth: 1)))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+    private func badgeView(text: String, bg: Color, border: Color, fg: Color) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .bold))
+            .tracking(1.2)
+            .foregroundStyle(fg)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(bg)
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(border, lineWidth: 1))
+            )
     }
 
-    private func infoCell(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.system(size: 10))
-                .foregroundStyle(DinoColors.textDim)
-            Text(value)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
+    private func infoCell(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(textDim)
+            Text(value.isEmpty ? "—" : value)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color(red: 0.87, green: 0.89, blue: 0.95))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
     }
 
     // MARK: - Actions
 
-    private var actionSection: some View {
-        VStack(spacing: 10) {
-            // Set as Wallpaper – prominent blue button
-            Button {
-                Task { await engine.setWallpaper(wallpaper, for: selectedDisplayID) }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "display").font(.system(size: 13))
-                    Text("Wallpaper Olarak Ayarla").font(.system(size: 13, weight: .semibold))
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: 10).fill(DinoColors.primary))
-            }
-            .buttonStyle(.plain)
-
-            // Favorite toggle
-            Button {
-                isFavorite.toggle()
-                Task {
-                    guard let userId = AuthService.shared.currentUser?.id else { return }
-                    _ = try? await WallpaperService.shared.toggleFavorite(userId: userId, wallpaperId: wallpaper.id)
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: isFavorite ? "star.fill" : "star")
-                        .font(.system(size: 12))
-                        .foregroundStyle(isFavorite ? .yellow : DinoColors.textSec)
-                    Text(isFavorite ? "Favorilere Eklendi" : "Favorilere Ekle")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(DinoColors.textSec)
-                    Spacer()
-                }
-                .padding(.vertical, 8)
-            }
-            .buttonStyle(.plain)
-
-            // Download button (if not already downloaded)
-            if !wallpaper.isDownloaded {
-                Button {
-                    isDownloading = true
-                    Task {
-                        try? await WallpaperManager.shared.downloadWallpaper(wallpaper)
-                        isDownloading = false
-                    }
-                } label: {
-                    HStack(spacing: 8) {
-                        if isDownloading {
-                            ProgressView().controlSize(.small).tint(DinoColors.textSec)
-                        } else {
-                            Image(systemName: "arrow.down.circle").font(.system(size: 12))
-                        }
-                        Text(isDownloading ? "İndiriliyor..." : "İndir")
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    .foregroundStyle(DinoColors.textSec)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(DinoColors.surface).overlay(RoundedRectangle(cornerRadius: 8).stroke(DinoColors.border.opacity(0.4), lineWidth: 1)))
-                }
-                .buttonStyle(.plain)
-                .disabled(isDownloading)
-            }
-
-            // Report link
-            HStack {
-                Image(systemName: "exclamationmark.triangle").font(.system(size: 10))
-                Text("Bu wallpaper'ı bildir").font(.system(size: 10))
-            }
-            .foregroundStyle(DinoColors.textDim)
-            .padding(.top, 4)
+    private func setAsWallpaper() {
+        guard !isSettingWallpaper else { return }
+        isSettingWallpaper = true
+        Task {
+            await engine.setWallpaper(wallpaper)
+            lastSyncDate = Date()
+            isSettingWallpaper = false
         }
     }
 
-    // MARK: - Footer
+    // MARK: - Thumbnail Loading
 
-    private var footerSection: some View {
-        VStack(spacing: 6) {
-            Rectangle().fill(DinoColors.border.opacity(0.2)).frame(height: 1)
-            HStack {
-                Text("VERSION 1.0.0")
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(DinoColors.textDim)
-                Spacer()
-                Text("Yardım").font(.system(size: 9)).foregroundStyle(DinoColors.textDim)
-                Text("·").foregroundStyle(DinoColors.textDim)
-                Text("Geri Bildirim").font(.system(size: 9)).foregroundStyle(DinoColors.textDim)
+    private func loadThumbnail() async {
+        if let localURL = wallpaper.localURL {
+            if let img = await generateThumbnail(from: localURL) {
+                thumbnail = img; return
+            }
+        }
+        if let path = wallpaper.thumbnailPath, let url = URL(string: path) {
+            if let (data, _) = try? await URLSession.shared.data(from: url),
+               let img = NSImage(data: data) {
+                thumbnail = img
             }
         }
     }
 
-    // MARK: - Helpers
-
-    private func sectionTitle(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 10, weight: .bold))
-            .foregroundStyle(DinoColors.textDim)
-    }
-}
-
-// MARK: - Helper Views
-
-struct InfoCell: View {
-    let title: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.caption2).foregroundStyle(.secondary)
-            Text(value).font(.caption).fontWeight(.medium)
-        }
-    }
-}
-
-struct DetailRow: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        HStack {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Spacer()
-            Text(value).font(.caption).fontWeight(.medium)
-        }
+    private func generateThumbnail(from url: URL) async -> NSImage? {
+        return await Task.detached(priority: .background) {
+            let asset = AVURLAsset(url: url)
+            let gen = AVAssetImageGenerator(asset: asset)
+            gen.appliesPreferredTrackTransform = true
+            gen.maximumSize = CGSize(width: 320, height: 200)
+            gen.requestedTimeToleranceBefore = CMTime(seconds: 1, preferredTimescale: 600)
+            gen.requestedTimeToleranceAfter  = CMTime(seconds: 1, preferredTimescale: 600)
+            let time = CMTime(seconds: 1, preferredTimescale: 600)
+            if let cg = try? gen.copyCGImage(at: time, actualTime: nil) {
+                return NSImage(cgImage: cg, size: CGSize(width: cg.width, height: cg.height))
+            }
+            return nil
+        }.value
     }
 }
