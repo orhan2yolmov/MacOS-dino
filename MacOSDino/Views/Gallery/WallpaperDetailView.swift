@@ -364,18 +364,21 @@ struct WallpaperDetailView: View {
     }
 
     private func generateThumbnail(from url: URL) async -> NSImage? {
-        return await Task.detached(priority: .background) {
-            let asset = AVURLAsset(url: url)
-            let gen = AVAssetImageGenerator(asset: asset)
-            gen.appliesPreferredTrackTransform = true
-            gen.maximumSize = CGSize(width: 320, height: 200)
-            gen.requestedTimeToleranceBefore = CMTime(seconds: 1, preferredTimescale: 600)
-            gen.requestedTimeToleranceAfter  = CMTime(seconds: 1, preferredTimescale: 600)
-            let time = CMTime(seconds: 1, preferredTimescale: 600)
-            if let cg = try? gen.copyCGImage(at: time, actualTime: nil) {
-                return NSImage(cgImage: cg, size: CGSize(width: cg.width, height: cg.height))
-            }
+        let asset = AVURLAsset(url: url)
+        let gen = AVAssetImageGenerator(asset: asset)
+        gen.appliesPreferredTrackTransform = true
+        gen.maximumSize = CGSize(width: 480, height: 300)
+        gen.requestedTimeToleranceBefore = CMTime(seconds: 1, preferredTimescale: 600)
+        gen.requestedTimeToleranceAfter  = CMTime(seconds: 1, preferredTimescale: 600)
+
+        let time = CMTime(seconds: 0.5, preferredTimescale: 600)
+        
+        do {
+            let cgImage = try await gen.image(at: time).image
+            return NSImage(cgImage: cgImage, size: CGSize(width: cgImage.width, height: cgImage.height))
+        } catch {
+            print("Thumbnail generation failed: \(error.localizedDescription)")
             return nil
-        }.value
+        }
     }
 }
