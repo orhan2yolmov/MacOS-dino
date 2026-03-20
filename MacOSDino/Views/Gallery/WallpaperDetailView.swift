@@ -3,7 +3,6 @@
 
 import SwiftUI
 import AVFoundation
-import CoreMedia
 
 struct WallpaperDetailView: View {
     let wallpaper: Wallpaper
@@ -20,8 +19,9 @@ struct WallpaperDetailView: View {
     private let surface     = Color(red: 0.102, green: 0.133, blue: 0.204)  // #1a2234
     private let borderDark  = Color(red: 0.176, green: 0.227, blue: 0.329)  // #2d3a54
     private let primary     = Color(red: 0.051, green: 0.349, blue: 0.949)  // #0d59f2
-    private let textSec     = Color(red: 0.6,   green: 0.65,  blue: 0.76)
-    private let textDim     = Color(red: 0.38,  green: 0.44,  blue: 0.56)
+    private let textSlate200 = Color(red: 0.89, green: 0.91, blue: 0.95)
+    private let textSec     = Color(red: 0.59, green: 0.64, blue: 0.73)     // slate-400
+    private let textDim     = Color(red: 0.40, green: 0.45, blue: 0.54)     // slate-500
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -40,13 +40,13 @@ struct WallpaperDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
             // Section header
             Text("DISPLAY CONFIGURATION")
-                .font(.system(size: 10, weight: .bold))
-                .tracking(1.2)
-                .foregroundStyle(textDim)
-                .padding(.bottom, 14)
+                .font(.system(size: 12, weight: .bold)) // text-xs font-bold
+                .tracking(1.2) // tracking-wider
+                .foregroundStyle(textDim) // text-slate-500
+                .padding(.bottom, 16) // mb-4
 
-            // Monitor preview container (aspect-video)
-            HStack(spacing: 12) {
+            // Monitor preview container (aspect-video) bg-surface-dark/50 p-6 rounded-xl border border-border-dark mb-4
+            HStack(spacing: 8) { // gap-2
                 Spacer()
 
                 // Monitor 1 (active with wallpaper)
@@ -62,20 +62,21 @@ struct WallpaperDetailView: View {
                             Color(primary.opacity(0.1))
                         }
                     }
-                    .frame(width: 96, height: 64)
+                    .frame(width: 96, height: 64) // w-24 h-16
                     .clipShape(RoundedRectangle(cornerRadius: 6))
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
-                            .stroke(primary, lineWidth: 2)
+                            .stroke(primary, lineWidth: 2) // border-2 border-primary
                     )
 
-                    // "1" badge
+                    // "1" badge: absolute text-[8px] font-bold text-white bg-primary px-1 bottom-0 right-0
                     Text("1")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 16, height: 16)
-                        .background(Circle().fill(primary))
-                        .offset(x: 6, y: 6)
+                        .padding(.horizontal, 4) // px-1
+                        .padding(.vertical, 2)
+                        .background(primary)
+                        .cornerRadius(2)
                 }
 
                 // Monitor 2 (empty)
@@ -85,241 +86,251 @@ struct WallpaperDetailView: View {
                             .fill(surface)
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(borderDark, lineWidth: 1))
                         Image(systemName: "display")
-                            .font(.system(size: 22, weight: .ultraLight))
-                            .foregroundStyle(textDim.opacity(0.5))
+                            .font(.system(size: 20))
+                            .foregroundStyle(Color(red: 0.28, green: 0.33, blue: 0.42)) // text-slate-600
                     }
                     .frame(width: 96, height: 64)
 
+                    // "2" badge
                     Text("2")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(textDim)
-                        .offset(x: 4, y: 4)
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(Color(red: 0.28, green: 0.33, blue: 0.42)) // text-slate-600
+                        .padding(.horizontal, 4) // px-1
+                        .padding(.vertical, 2)
+                        .background(surface)
+                        .cornerRadius(2)
                 }
 
                 Spacer()
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
+            .padding(.vertical, 24) // p-6 roughly since it's an aspect-video box
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(surface.opacity(0.5))
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(borderDark, lineWidth: 1))
             )
-            .padding(.bottom, 12)
+            .padding(.bottom, 16) // mb-4
 
             // Remove button
             Button {
                 engine.removeWallpaper(for: nil)
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) { // gap-2
                     Image(systemName: "rectangle.slash")
-                        .font(.system(size: 11))
+                        .font(.system(size: 14)) // text-sm
                     Text("Remove Display Wallpaper")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12, weight: .medium)) // text-xs font-medium
                 }
-                .foregroundStyle(textSec)
+                .foregroundStyle(textSec) // text-slate-400 hover:text-white handled via generic hover natively
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
+                .padding(.vertical, 8) // py-2
                 .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(borderDark, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 8) // rounded-lg
+                        .stroke(borderDark, lineWidth: 1) // border border-border-dark
                 )
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
-        .padding(24)
-        .overlay(
-            Rectangle().fill(borderDark).frame(height: 1),
-            alignment: .bottom
-        )
+        .padding(24) // p-6
     }
 
     // MARK: - Wallpaper Details Section
 
     private var wallpaperDetailsSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Divider
+        VStack(alignment: .leading, spacing: 24) { // space-y-6 pt-0
+            // Divider h-px bg-border-dark w-full
             Rectangle().fill(borderDark).frame(height: 1).frame(maxWidth: .infinity)
 
-            // Name + badges
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
+                // Name mb-1
                 Text(wallpaper.name)
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(size: 20, weight: .bold)) // text-xl font-bold
                     .foregroundStyle(.white)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 4) // mb-1
 
-                HStack(spacing: 6) {
+                // Badges mb-4
+                HStack(spacing: 8) { // gap-2
                     if wallpaper.isDownloaded {
-                        badgeView(text: "DOWNLOADED", bg: Color.green.opacity(0.1),
-                                  border: Color.green.opacity(0.2), fg: .green)
+                        Text("DOWNLOADED")
+                            .font(.system(size: 10, weight: .bold)) // text-[10px] font-bold
+                            .foregroundStyle(Color.green) // text-green-500
+                            .padding(.horizontal, 8) // px-2
+                            .padding(.vertical, 2) // py-0.5
+                            .background(
+                                RoundedRectangle(cornerRadius: 4) // rounded
+                                    .fill(Color.green.opacity(0.1)) // bg-green-500/10
+                                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.green.opacity(0.2), lineWidth: 1))
+                            )
                     }
                     if wallpaper.isUltraHD || wallpaper.is8K {
-                        badgeView(text: wallpaper.is8K ? "8K" : "4K ULTRA HD",
-                                  bg: surface, border: .clear, fg: textSec)
+                        Text(wallpaper.is8K ? "8K ULTRA HD" : "4K ULTRA HD")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(textSec) // text-slate-400
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(RoundedRectangle(cornerRadius: 4).fill(surface))
                     }
                 }
-            }
+                .padding(.bottom, 24) // mb-6 slightly larger to match HTML space between badges and grid
 
-            // 2×2 info grid
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                infoCell(label: "Dimensions", value: wallpaper.dimensionsFormatted)
-                infoCell(label: "File Size",  value: wallpaper.fileSizeFormatted)
-                infoCell(label: "Format",     value: wallpaper.contentType.displayName)
-                infoCell(label: "Category",   value: wallpaper.category.displayName)
-            }
-
-            // Set as Wallpaper button
-            Button {
-                setAsWallpaper()
-            } label: {
-                HStack(spacing: 10) {
-                    if isSettingWallpaper {
-                        ProgressView().progressViewStyle(.circular).scaleEffect(0.7).tint(.white)
-                    } else {
-                        Image(systemName: "sparkles.rectangle.stack.fill")
-                            .font(.system(size: 16))
-                    }
-                    Text(isSettingWallpaper ? "Setting…" : "Set as Wallpaper")
-                        .font(.system(size: 15, weight: .bold))
+                // 2×2 info grid (grid grid-cols-2 gap-4 text-sm mb-6)
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                    infoCell(label: "Dimensions", value: wallpaper.dimensionsFormatted)
+                    infoCell(label: "File Size",  value: wallpaper.fileSizeFormatted)
+                    infoCell(label: "Format",     value: wallpaper.contentType.displayName)
+                    infoCell(label: "Category",   value: wallpaper.category.displayName)
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(primary)
-                        .shadow(color: primary.opacity(0.3), radius: 12, y: 4)
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(isSettingWallpaper)
+                .padding(.bottom, 24) // mb-6
 
-            // Add to Favorites checkbox row
-            Button {
-                withAnimation(.easeInOut(duration: 0.15)) { isFavorite.toggle() }
-            } label: {
-                HStack(spacing: 12) {
-                    // Checkbox
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(isFavorite ? primary : Color.clear)
-                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(isFavorite ? primary : borderDark, lineWidth: 1.5))
-                            .frame(width: 18, height: 18)
-                        if isFavorite {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.white)
+                // Set as Wallpaper button mb-4
+                Button {
+                    setAsWallpaper()
+                } label: {
+                    HStack(spacing: 12) { // gap-3
+                        if isSettingWallpaper {
+                            ProgressView().progressViewStyle(.circular).scaleEffect(0.7).tint(.white)
+                        } else {
+                            Image(systemName: "desktopcomputer") // desktop_windows
+                                .font(.system(size: 18))
                         }
+                        Text(isSettingWallpaper ? "Setting…" : "Set as Wallpaper")
+                            .font(.system(size: 16, weight: .bold)) // font-bold
                     }
-
-                    Image(systemName: isFavorite ? "star.fill" : "star")
-                        .font(.system(size: 14))
-                        .foregroundStyle(isFavorite ? primary : textSec)
-
-                    Text("Add to Favorites")
-                        .font(.system(size: 13))
-                        .foregroundStyle(isFavorite ? .white : textSec)
-
-                    Spacer()
+                    .foregroundStyle(.white) // text-white
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16) // py-4
+                    .background(
+                        RoundedRectangle(cornerRadius: 12) // rounded-xl
+                            .fill(primary) // bg-primary
+                            .shadow(color: primary.opacity(0.2), radius: 12, y: 4) // shadow-lg shadow-primary/20
+                    )
                 }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(borderDark, lineWidth: 1)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.clear))
-                )
-            }
-            .buttonStyle(.plain)
+                .buttonStyle(.plain)
+                .disabled(isSettingWallpaper)
+                .padding(.bottom, 16) // mb-4
 
-            // Report link
-            Button {
-                // TODO: report
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 10))
-                    Text("Report this wallpaper")
-                        .font(.system(size: 11))
+                // Add to Favorites checkbox row & report link (flex flex-col gap-3)
+                VStack(spacing: 12) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { isFavorite.toggle() }
+                    } label: {
+                        HStack(spacing: 12) { // gap-3
+                            // Checkbox
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(isFavorite ? surface : surface) // bg-surface-dark
+                                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(borderDark, lineWidth: 1))
+                                    .frame(width: 16, height: 16)
+                                if isFavorite {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 10, weight: .black))
+                                        .foregroundStyle(primary) // text-primary
+                                }
+                            }
+
+                            HStack(spacing: 8) { // gap-2 inside
+                                Image(systemName: isFavorite ? "star.fill" : "star")
+                                    .font(.system(size: 14)) // text-sm
+                                    .foregroundStyle(primary) // text-primary fill-1
+
+                                Text("Add to Favorites")
+                                    .font(.system(size: 14, weight: .medium)) // text-sm font-medium
+                                    .foregroundStyle(textSlate200) // text-slate-200
+                            }
+
+                            Spacer()
+                        }
+                        .padding(12) // p-3
+                        .background(
+                            RoundedRectangle(cornerRadius: 8) // rounded-lg
+                                .stroke(borderDark, lineWidth: 1) // border border-border-dark
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    // Report link
+                    Button {
+                        // TODO: report
+                    } label: {
+                        HStack(spacing: 4) { // gap-1
+                            Image(systemName: "exclamationmark.triangle") // report
+                                .font(.system(size: 14)) // text-sm
+                            Text("Report this wallpaper")
+                                .font(.system(size: 12)) // text-xs
+                        }
+                        .foregroundStyle(textDim) // text-slate-500
+                        .padding(.vertical, 4) // py-1
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .foregroundStyle(textDim)
-                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.plain)
 
-            // Version / Help footer
-            VStack(spacing: 10) {
+            // Version / Help footer: mt-8 pt-8 border-t border-border-dark space-y-4 pb-8
+            VStack(spacing: 16) { // space-y-4
                 Rectangle().fill(borderDark).frame(height: 1).frame(maxWidth: .infinity)
+                    .padding(.top, 8) // simulate mt-8 roughly with padding
 
-                HStack {
+                HStack { // justify-between
                     Text("VERSION 4.2.0-STABLE")
-                        .font(.system(size: 9, weight: .bold))
-                        .tracking(1.2)
-                        .foregroundStyle(textDim)
+                        .font(.system(size: 10, weight: .bold)) // text-[10px] font-bold
+                        .tracking(1.5) // tracking-widest
+                        .foregroundStyle(textDim) // text-slate-500
                     Spacer()
                     Text("LAST SYNC: 2M AGO")
-                        .font(.system(size: 9, weight: .bold))
-                        .tracking(1.2)
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(1.5)
                         .foregroundStyle(textDim)
                 }
 
-                HStack(spacing: 20) {
+                HStack(spacing: 16) { // gap-4
                     Button {
                         // Help Center
                     } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "questionmark.circle")
-                                .font(.system(size: 11))
+                        HStack(spacing: 8) { // gap-2
+                            Image(systemName: "questionmark.circle") // help
+                                .font(.system(size: 16)) // text-base
                             Text("Help Center")
-                                .font(.system(size: 11))
+                                .font(.system(size: 12)) // text-xs
                         }
-                        .foregroundStyle(textDim)
+                        .foregroundStyle(textSec) // text-slate-400
                     }
                     .buttonStyle(.plain)
 
                     Button {
                         // Feedback
                     } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "envelope")
-                                .font(.system(size: 11))
+                        HStack(spacing: 8) { // gap-2
+                            Image(systemName: "bubble.left") // chat_bubble
+                                .font(.system(size: 16)) // text-base
                             Text("Feedback")
-                                .font(.system(size: 11))
+                                .font(.system(size: 12)) // text-xs
                         }
-                        .foregroundStyle(textDim)
+                        .foregroundStyle(textSec) // text-slate-400
                     }
                     .buttonStyle(.plain)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(.bottom, 32)
         }
-        .padding(24)
-        .padding(.top, 0)
+        .padding(.horizontal, 24) // p-6 but pt-0 is handled by ignoring top padding
     }
 
     // MARK: - Helper Views
 
-    private func badgeView(text: String, bg: Color, border: Color, fg: Color) -> some View {
-        Text(text)
-            .font(.system(size: 10, weight: .bold))
-            .tracking(1.2)
-            .foregroundStyle(fg)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(bg)
-                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(border, lineWidth: 1))
-            )
-    }
-
     private func infoCell(label: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(textDim)
+                .font(.system(size: 12)) // text-xs
+                .foregroundStyle(textDim) // text-slate-500
             Text(value.isEmpty ? "—" : value)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color(red: 0.87, green: 0.89, blue: 0.95))
+                .font(.system(size: 14, weight: .medium)) // text-sm font-medium
+                .foregroundStyle(textSlate200) // text-slate-200
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

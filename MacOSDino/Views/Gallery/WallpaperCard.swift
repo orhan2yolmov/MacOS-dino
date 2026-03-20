@@ -3,7 +3,6 @@
 
 import SwiftUI
 import AVFoundation
-import CoreMedia
 
 struct WallpaperCard: View {
     let wallpaper: Wallpaper
@@ -15,6 +14,7 @@ struct WallpaperCard: View {
     // HTML colors
     private let borderDark   = Color(red: 0.176, green: 0.227, blue: 0.329)  // #2d3a54
     private let primary      = Color(red: 0.051, green: 0.349, blue: 0.949)  // #0d59f2
+    private let textSlate300 = Color(red: 0.79, green: 0.83, blue: 0.90)     // slate-300
 
     var body: some View {
         GeometryReader { geo in
@@ -28,35 +28,34 @@ struct WallpaperCard: View {
                 // SELECTED badge (top-right, always when selected)
                 if isSelected {
                     Text("SELECTED")
-                        .font(.system(size: 10, weight: .bold))
-                        .tracking(1.5)
+                        .font(.system(size: 10, weight: .bold)) // text-[10px] font-bold
+                        .tracking(1.5) // tracking-widest
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(RoundedRectangle(cornerRadius: 4).fill(primary))
-                        .padding(.top, 10)
-                        .padding(.trailing, 10)
+                        .padding(.horizontal, 8) // px-2
+                        .padding(.vertical, 4) // py-1
+                        .background(RoundedRectangle(cornerRadius: 4).fill(primary)) // rounded bg-primary
+                        .padding(.top, 12) // top-3
+                        .padding(.trailing, 12) // right-3
                 }
             }
         }
-        .aspectRatio(16.0 / 10.0, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .aspectRatio(16.0 / 10.0, contentMode: .fit) // aspect-[16/10]
+        .clipShape(RoundedRectangle(cornerRadius: 12)) // rounded-xl (12pt default)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(isSelected ? primary : (isHovered ? primary.opacity(0.5) : borderDark),
-                        lineWidth: isSelected ? 2 : 1)
+                        lineWidth: isSelected ? 2 : 1) // border-2 for selected, border for default
         )
-        .shadow(
+        .shadow( // shadow-[0_0_20px_rgba(13,89,242,0.3)]
             color: isSelected ? primary.opacity(0.3) : .clear,
-            radius: 10
+            radius: 10, x: 0, y: 0
         )
-        .saturation(isSelected ? 1.0 : (isHovered ? 1.0 : 0.8))
-        .scaleEffect(isHovered ? 1.025 : 1.0)
+        .saturation(isSelected ? 1.0 : (isHovered ? 1.0 : 0.8)) // grayscale-[0.2] group-hover:grayscale-0
         .animation(.easeInOut(duration: 0.2), value: isHovered)
         .animation(.easeInOut(duration: 0.2), value: isSelected)
         .onHover { isHovered = $0 }
         .task(id: wallpaper.id) { await loadThumbnail() }
-        .cursor(.pointingHand)
+        .cursor(.pointingHand) // cursor-pointer
     }
 
     // MARK: - Thumbnail
@@ -66,11 +65,9 @@ struct WallpaperCard: View {
         if let img = thumbnail {
             Image(nsImage: img)
                 .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: width, height: height)
+                .aspectRatio(contentMode: .fill) // object-cover
+                .frame(width: width, height: height) // w-full h-full
                 .clipped()
-                .scaleEffect(isHovered ? 1.05 : 1.0)
-                .animation(.easeInOut(duration: 0.4), value: isHovered)
         } else {
             ZStack {
                 Color(red: 0.102, green: 0.133, blue: 0.204)   // surface-dark placeholder
@@ -78,6 +75,7 @@ struct WallpaperCard: View {
                     .font(.system(size: 24, weight: .ultraLight))
                     .foregroundStyle(Color(red: 0.176, green: 0.227, blue: 0.329))
             }
+            .frame(width: width, height: height)
         }
     }
 
@@ -88,29 +86,31 @@ struct WallpaperCard: View {
         GeometryReader { geo in
             VStack {
                 Spacer()
-                // Info label at bottom
+                // Info label at bottom (flex flex-col justify-end p-4)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(wallpaper.name)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.white)
+                        .font(.system(size: 14, weight: .bold)) // text-sm font-bold
+                        .foregroundStyle(.white) // text-white
                     Text(wallpaper.category.displayName)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(red: 0.78, green: 0.82, blue: 0.91))
+                        .font(.system(size: 12)) // text-xs
+                        .foregroundStyle(textSlate300) // text-slate-300
                 }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 12)
+                .padding(16) // p-4
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(width: geo.size.width, height: geo.size.height)
+            .frame(width: geo.size.width, height: geo.size.height) // inset-0
             .background(
                 LinearGradient(
                     colors: [
-                        Color.black.opacity(isSelected ? 0.8 : 0.6),
-                        Color.clear
+                        Color.black.opacity(0.8), // from-black/80
+                        Color.black.opacity(0.4), // via-transparent ish
+                        Color.clear // to-transparent
                     ],
                     startPoint: .bottom,
-                    endPoint: .center
+                    endPoint: .top
                 )
             )
+            // opacity-100 on selected, opacity-0 group-hover:opacity-100 on non-selected
             .opacity(isSelected ? 1.0 : (isHovered ? 1.0 : 0.0))
             .animation(.easeInOut(duration: 0.25), value: isHovered)
         }

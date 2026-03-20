@@ -15,7 +15,7 @@ enum GalleryNavTab: String, CaseIterable {
     var icon: String {
         switch self {
         case .hot:        return "flame.fill"
-        case .new:        return "sparkles"
+        case .new:        return "clock.fill"
         case .favorites:  return "heart.fill"
         case .uploads:    return "icloud.and.arrow.up.fill"
         case .downloaded: return "arrow.down.circle.fill"
@@ -41,13 +41,14 @@ struct GalleryView: View {
     @State private var viewMode: ViewMode = .grid
 
     // HTML design tokens
-    private let bg         = Color(red: 0.063, green: 0.086, blue: 0.133)   // #101622
+    private let bg         = Color(red: 0.063, green: 0.086, blue: 0.133)   // #101622 (w-72 bg)
     private let mainBg     = Color(red: 0.039, green: 0.059, blue: 0.094)   // #0a0f18
     private let surface    = Color(red: 0.102, green: 0.133, blue: 0.204)   // #1a2234
     private let borderDark = Color(red: 0.176, green: 0.227, blue: 0.329)   // #2d3a54
     private let primary    = Color(red: 0.051, green: 0.349, blue: 0.949)   // #0d59f2
-    private let textSec    = Color(red: 0.6,   green: 0.65,  blue: 0.76)
-    private let textDim    = Color(red: 0.38,  green: 0.44,  blue: 0.56)
+    private let textSlate200 = Color(red: 0.89, green: 0.91, blue: 0.95)
+    private let textSec    = Color(red: 0.59, green: 0.64, blue: 0.73)      // slate-400
+    private let textDim    = Color(red: 0.40, green: 0.45, blue: 0.54)      // slate-500
 
     enum ViewMode { case grid, list }
 
@@ -55,7 +56,6 @@ struct GalleryView: View {
         HStack(spacing: 0) {
             leftSidebar
             mainContent
-            // right panel only if something selected
             if let wallpaper = selectedWallpaper {
                 Rectangle().fill(borderDark).frame(width: 1)
                 WallpaperDetailView(wallpaper: wallpaper)
@@ -98,62 +98,65 @@ struct GalleryView: View {
 
     private var leftSidebar: some View {
         VStack(spacing: 0) {
-            // ─── Header (logo + search + nav) ─────────────────────────────
+            // p-6 top section
             VStack(alignment: .leading, spacing: 0) {
-                // Logo
+                // Logo section: flex items-center gap-3 mb-8
                 HStack(spacing: 12) {
+                    // w-8 h-8 rounded-lg bg-primary
                     RoundedRectangle(cornerRadius: 8)
                         .fill(primary)
                         .frame(width: 32, height: 32)
                         .overlay(
                             Image(systemName: "photo.stack.fill")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(size: 16))
                                 .foregroundStyle(.white)
                         )
-                    VStack(alignment: .leading, spacing: 1) {
+                    // text elements
+                    VStack(alignment: .leading, spacing: 0) {
                         Text("Wallpapers")
-                            .font(.system(size: 14, weight: .bold))
+                            .font(.system(size: 18, weight: .bold)) // text-lg font-bold
                             .foregroundStyle(.white)
                         Text("Professional Suite")
-                            .font(.system(size: 10))
-                            .foregroundStyle(textDim)
+                            .font(.system(size: 12)) // text-xs
+                            .foregroundStyle(textSec)
                     }
                     Spacer()
                 }
-                .padding(.bottom, 24)
+                .padding(.bottom, 32)
 
-                // Search
+                // Search: mb-6 relative
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 13))
-                        .foregroundStyle(textDim)
+                        .font(.system(size: 14)) // text-sm
+                        .foregroundStyle(textSec)
                     TextField("Search wallpapers...", text: $searchText)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.white)
+                        .font(.system(size: 14)) // text-sm
+                        .foregroundStyle(textSlate200)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 10)
+                .padding(.leading, 12)
+                .padding(.trailing, 16)
+                .padding(.vertical, 8) // py-2
                 .background(RoundedRectangle(cornerRadius: 8).fill(surface))
-                .padding(.bottom, 20)
+                .padding(.bottom, 24)
 
-                // Nav items
-                VStack(spacing: 2) {
+                // Nav items: mb-8 space-y-1
+                VStack(spacing: 4) {
                     ForEach(GalleryNavTab.allCases, id: \.self) { tab in
                         navItem(tab: tab)
                     }
                 }
+                .padding(.bottom, 32)
             }
-            .padding(24)
-            .overlay(Rectangle().fill(borderDark).frame(height: 1), alignment: .bottom)
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
 
-            // ─── Filters (scrollable) ──────────────────────────────────────
+            // Filters: space-y-6 overflow-y-auto pr-2
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 24) {
                     // Categories
                     filterSection(title: "Categories") {
-                        ForEach([WallpaperCategory.cartoon, .game, .animation, .nature,
-                                  .abstract, .cityscape, .deepSpace, .minimal]) { cat in
+                        ForEach([WallpaperCategory.cartoon, .game, .animation, .nature]) { cat in
                             filterCheckbox(label: cat.displayName,
                                            isOn: selectedCategories.contains(cat)) {
                                 toggle(&selectedCategories, item: cat)
@@ -163,40 +166,41 @@ struct GalleryView: View {
 
                     // Ratio
                     filterSection(title: "Ratio") {
-                        ForEach([AspectRatio.widescreen, .ultrawide, .standard]) { ratio in
-                            filterCheckbox(label: ratio.rawValue,
-                                           isOn: selectedRatios.contains(ratio)) {
-                                toggle(&selectedRatios, item: ratio)
-                            }
-                        }
+                        filterCheckbox(label: "16:9 (Widescreen)", isOn: selectedRatios.contains(.widescreen)) { toggle(&selectedRatios, item: .widescreen) }
+                        filterCheckbox(label: "21:9 (Ultrawide)", isOn: selectedRatios.contains(.ultrawide)) { toggle(&selectedRatios, item: .ultrawide) }
+                        filterCheckbox(label: "4:3 (Standard)", isOn: selectedRatios.contains(.standard)) { toggle(&selectedRatios, item: .standard) }
                     }
                 }
-                .padding(24)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
             }
 
             Spacer(minLength: 0)
 
-            // ─── Footer (Refresh Data) ─────────────────────────────────────
+            // Footer Button: mt-auto p-6 border-t
             VStack(spacing: 0) {
                 Rectangle().fill(borderDark).frame(height: 1)
                 Button {
                     Task { await viewModel.loadWallpapers(sort: selectedNavTab == .new ? .new : .hot) }
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "arrow.clockwise").font(.system(size: 13))
-                        Text("Refresh Data").font(.system(size: 13))
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 14)) // text-sm
+                        Text("Refresh Data")
+                            .font(.system(size: 14, weight: .bold)) // text-sm font-bold
                     }
-                    .foregroundStyle(textSec)
+                    .foregroundStyle(textSlate200)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(surface))
+                    .padding(.vertical, 12) // py-3
+                    .background(RoundedRectangle(cornerRadius: 12).fill(surface)) // rounded-xl
                 }
                 .buttonStyle(.plain)
-                .padding(24)
+                .padding(24) // p-6
             }
         }
-        .frame(width: 288)
+        .frame(width: 288) // w-72
         .background(bg)
+        .overlay(Rectangle().fill(borderDark).frame(width: 1), alignment: .trailing)
     }
 
     // MARK: - Sidebar Helpers
@@ -206,55 +210,59 @@ struct GalleryView: View {
         return Button {
             withAnimation(.easeInOut(duration: 0.15)) { selectedNavTab = tab }
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 12) { // gap-3
                 Image(systemName: tab.icon)
-                    .font(.system(size: 13))
+                    .font(.system(size: 18)) // text-[20px] ish
                     .foregroundStyle(isActive ? primary : textSec)
-                    .frame(width: 18)
+                    .frame(width: 20)
                 Text(tab.rawValue)
-                    .font(.system(size: 13, weight: isActive ? .semibold : .regular))
+                    .font(.system(size: 14, weight: isActive ? .medium : .regular)) // text-sm
                     .foregroundStyle(isActive ? primary : textSec)
                 Spacer()
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 12) // px-3
+            .padding(.vertical, 8)    // py-2
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isActive ? primary.opacity(0.15) : Color.clear)
+                RoundedRectangle(cornerRadius: 8) // rounded-lg
+                    .fill(isActive ? primary.opacity(0.2) : Color.clear)
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
     private func filterSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) { // mb-3
             Text(title.uppercased())
-                .font(.system(size: 10, weight: .bold))
-                .tracking(1.2)
-                .foregroundStyle(textDim)
-            content()
+                .font(.system(size: 12, weight: .bold)) // text-xs font-bold
+                .tracking(1.2) // tracking-wider
+                .foregroundStyle(textDim) // text-slate-500
+            VStack(alignment: .leading, spacing: 8) { // space-y-2
+                content()
+            }
         }
     }
 
     private func filterCheckbox(label: String, isOn: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) { // gap-3
                 ZStack {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(isOn ? primary : Color.clear)
-                        .overlay(RoundedRectangle(cornerRadius: 3).stroke(isOn ? primary : borderDark, lineWidth: 1.5))
+                    RoundedRectangle(cornerRadius: 4) // rounded
+                        .fill(isOn ? surface : surface) // bg-surface-dark
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(borderDark, lineWidth: 1))
                         .frame(width: 16, height: 16)
                     if isOn {
                         Image(systemName: "checkmark")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.white)
+                            .font(.system(size: 10, weight: .black))
+                            .foregroundStyle(primary) // text-primary
                     }
                 }
                 Text(label)
-                    .font(.system(size: 12))
-                    .foregroundStyle(isOn ? .white : textSec)
+                    .font(.system(size: 14)) // text-sm
+                    .foregroundStyle(isOn ? textSlate200 : textSec) // text-slate-400 group-hover:text-slate-200
                 Spacer()
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -267,36 +275,34 @@ struct GalleryView: View {
 
     private var mainContent: some View {
         VStack(spacing: 0) {
-            // Header
+            // Header: mb-8 flex
             HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Discovery")
-                        .font(.system(size: 28, weight: .bold))
+                        .font(.system(size: 30, weight: .bold)) // text-3xl
                         .foregroundStyle(.white)
                     Text("Browsing \(displayableWallpapers.count) high-quality wallpapers")
-                        .font(.system(size: 13))
-                        .foregroundStyle(textSec)
+                        .font(.system(size: 16)) // text-base placeholder
+                        .foregroundStyle(textSec) // text-slate-400
                 }
                 Spacer()
-                // Grid / List toggle
-                HStack(spacing: 2) {
+                // Grid / List toggle: flex gap-2
+                HStack(spacing: 8) {
                     toggleBtn(mode: .grid, icon: "square.grid.2x2.fill")
                     toggleBtn(mode: .list, icon: "list.bullet")
                 }
-                .padding(4)
-                .background(RoundedRectangle(cornerRadius: 8).fill(surface))
             }
-            .padding(.horizontal, 32)
+            .padding(.horizontal, 32) // p-8
             .padding(.top, 32)
-            .padding(.bottom, 24)
+            .padding(.bottom, 32)
 
-            // Grid
+            // Grid: grid gap-6
             if displayableWallpapers.isEmpty {
                 emptyState
             } else {
                 ScrollView {
                     LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 200, maximum: 280), spacing: 24)],
+                        columns: [GridItem(.adaptive(minimum: 220, maximum: 300), spacing: 24)], // gap-6 (24pt)
                         spacing: 24
                     ) {
                         ForEach(displayableWallpapers) { wp in
@@ -305,7 +311,7 @@ struct GalleryView: View {
                                 isSelected: selectedWallpaper?.id == wp.id
                             )
                             .onTapGesture {
-                                withAnimation(.easeInOut(duration: 0.18)) {
+                                withAnimation(.easeInOut(duration: 0.15)) {
                                     selectedWallpaper = (selectedWallpaper?.id == wp.id) ? nil : wp
                                 }
                             }
@@ -325,12 +331,12 @@ struct GalleryView: View {
             withAnimation(.easeInOut(duration: 0.15)) { viewMode = mode }
         } label: {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(viewMode == mode ? .white : textDim)
-                .frame(width: 30, height: 30)
+                .font(.system(size: 16))
+                .foregroundStyle(viewMode == mode ? .white : textSec)
+                .frame(width: 32, height: 32) // p-2ish
                 .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(viewMode == mode ? primary.opacity(0.5) : Color.clear)
+                    RoundedRectangle(cornerRadius: 8) // rounded-lg
+                        .fill(surface) // bg-surface-dark
                 )
         }
         .buttonStyle(.plain)
@@ -350,40 +356,5 @@ struct GalleryView: View {
                 .foregroundStyle(textDim)
             Spacer()
         }
-    }
-}
-
-// MARK: - WallpaperServiceViewModel
-
-@MainActor
-final class WallpaperServiceViewModel: ObservableObject {
-    @Published var wallpapers: [Wallpaper] = []
-    @Published var isLoading = false
-    @Published var errorMessage: String?
-
-    private let service = WallpaperService.shared
-    private var currentPage = 0
-
-    func loadWallpapers(category: WallpaperCategory? = nil,
-                        sort: WallpaperSortOption = .hot,
-                        page: Int = 0) async {
-        isLoading = true
-        currentPage = page
-        do {
-            let results = try await service.fetchWallpapers(page: page, category: category, sortBy: sort)
-            if page == 0 { wallpapers = results } else { wallpapers.append(contentsOf: results) }
-        } catch {
-            errorMessage = error.localizedDescription
-            print("⚠️ Wallpaper load error: \(error.localizedDescription)")
-        }
-        isLoading = false
-    }
-
-    func search(query: String) async {
-        guard !query.isEmpty else { await loadWallpapers(); return }
-        isLoading = true
-        do { wallpapers = try await service.searchWallpapers(query: query) }
-        catch { errorMessage = error.localizedDescription }
-        isLoading = false
     }
 }
