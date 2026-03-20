@@ -1,7 +1,10 @@
 // WallpaperCard.swift
-// MacOS-Dino – Wallpaper Kart Bileşeni (Modern Redesign)
+// MacOS-Dino – Professional Wallpaper Card (Dark Theme)
+// aspect-[16/10], gradient overlay, SELECTED badge, hover effects
 
 import SwiftUI
+import AVFoundation
+import CoreMedia
 
 struct WallpaperCard: View {
     let wallpaper: Wallpaper
@@ -9,199 +12,181 @@ struct WallpaperCard: View {
 
     @State private var isHovered = false
     @State private var thumbnailImage: NSImage?
-    @State private var isImageLoaded = false
+    @State private var loadFailed = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Thumbnail alanı
-            GeometryReader { geo in
-                ZStack {
-                    // Arka plan gradient placeholder
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    wallpaper.category.color.opacity(0.25),
-                                    Color(red: 0.08, green: 0.09, blue: 0.14)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+            // Thumbnail / Placeholder
+            thumbnailLayer
 
-                    if let image = thumbnailImage {
-                        Image(nsImage: image)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .opacity(isImageLoaded ? 1 : 0)
-                            .animation(.easeIn(duration: 0.4), value: isImageLoaded)
-                    } else {
-                        // Placeholder icon
-                        VStack(spacing: 8) {
-                            Image(systemName: wallpaper.contentType.icon)
-                                .font(.system(size: 28, weight: .light))
-                                .foregroundStyle(wallpaper.category.color.opacity(0.6))
-
-                            Text(wallpaper.category.displayName)
-                                .font(.caption2)
-                                .foregroundStyle(.white.opacity(0.3))
-                        }
-                    }
-
-                    // Hover dark overlay + play icon
-                    if isHovered {
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(.black.opacity(0.35))
-                            .transition(.opacity)
-
-                        Image(systemName: "play.circle.fill")
-                            .font(.system(size: 38, weight: .medium))
-                            .foregroundStyle(.white)
-                            .shadow(color: .black.opacity(0.4), radius: 8)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-
-                    // Seçili outline + parıltı
-                    if isSelected {
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [.blue, Color(red: 0.4, green: 0.2, blue: 0.9)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 2.5
-                            )
-                    }
-                }
-            }
-            .aspectRatio(16/9, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .shadow(
-                color: isSelected ? .blue.opacity(0.35) : .black.opacity(0.3),
-                radius: isSelected ? 12 : 6,
-                y: 4
+            // Bottom gradient overlay
+            LinearGradient(
+                colors: [.clear, .clear, Color.black.opacity(0.7)],
+                startPoint: .top,
+                endPoint: .bottom
             )
 
-            // Alt info katmanı
-            HStack(alignment: .bottom) {
-                // Tipler badge
-                VStack(alignment: .leading, spacing: 3) {
-                    if wallpaper.is8K {
-                        SmallBadge(text: "8K", gradient: [.orange, .red])
-                    } else if wallpaper.isUltraHD {
-                        SmallBadge(text: "4K", gradient: [.blue, .cyan])
-                    }
-                    if wallpaper.contentType == .metalShader {
-                        SmallBadge(text: "SHADER", gradient: [.purple, .pink])
-                    }
-                }
-
-                Spacer()
-
-                // Seçili checkmark
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundStyle(.white)
-                        .background(
-                            Circle()
-                                .fill(LinearGradient(
-                                    colors: [.blue, Color(red: 0.4, green: 0.2, blue: 0.9)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ))
-                                .frame(width: 20, height: 20)
-                        )
-                }
-            }
-            .padding(10)
-        }
-        // İsim alt kısım
-        .overlay(alignment: .bottomLeading) {
-            if isHovered || isSelected {
-                VStack(alignment: .leading, spacing: 0) {
-                    Spacer()
-
-                    // Gradient overlay
-                    LinearGradient(
-                        colors: [.clear, .black.opacity(0.7)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 60)
-                    .clipShape(
-                        .rect(
-                            topLeadingRadius: 0,
-                            bottomLeadingRadius: 14,
-                            bottomTrailingRadius: 14,
-                            topTrailingRadius: 0
-                        )
-                    )
-                    .overlay(alignment: .bottomLeading) {
-                        Text(wallpaper.name)
-                            .font(.system(size: 11, weight: .semibold))
+            // SELECTED badge (top-right)
+            if isSelected {
+                VStack {
+                    HStack {
+                        Spacer()
+                        Text("SEÇİLİ")
+                            .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .padding(.horizontal, 10)
-                            .padding(.bottom, 8)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(DinoColors.primary)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .padding(8)
                     }
+                    Spacer()
                 }
-                .transition(.opacity)
+            }
+
+            // Quality badge (top-left)
+            VStack {
+                HStack {
+                    if wallpaper.isUltraHD {
+                        Text("4K")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(Color.orange.opacity(0.85))
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .padding(8)
+                    } else if wallpaper.is8K {
+                        Text("8K")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(Color.purple.opacity(0.85))
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .padding(8)
+                    }
+                    Spacer()
+                }
+                Spacer()
+            }
+
+            // Info overlay (bottom, visible on hover or always for selected)
+            if isHovered || isSelected {
+                VStack(alignment: .leading, spacing: 3) {
+                    Spacer()
+                    Text(wallpaper.name)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text(wallpaper.category.displayName)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
             }
         }
-        .scaleEffect(isHovered ? 1.03 : 1.0)
-        .animation(.spring(duration: 0.25, bounce: 0.2), value: isHovered)
-        .animation(.spring(duration: 0.25, bounce: 0.2), value: isSelected)
-        .onHover { hovering in
-            withAnimation { isHovered = hovering }
-        }
-        .task {
-            await loadThumbnail()
+        .aspectRatio(16/10, contentMode: .fill)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(isSelected ? DinoColors.primary : DinoColors.border.opacity(0.3), lineWidth: isSelected ? 2 : 1)
+        )
+        .shadow(color: isSelected ? DinoColors.primary.opacity(0.3) : .clear, radius: isSelected ? 12 : 0)
+        .scaleEffect(isHovered ? 1.02 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .onHover { hovering in isHovered = hovering }
+        .task { await loadThumbnail() }
+    }
+
+    // MARK: - Thumbnail Layer
+
+    @ViewBuilder
+    private var thumbnailLayer: some View {
+        if let image = thumbnailImage {
+            Image(nsImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+        } else if loadFailed {
+            // Fallback gradient
+            cardGradient
+                .overlay(
+                    Image(systemName: wallpaper.contentType.icon)
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundStyle(.white.opacity(0.3))
+                )
+        } else {
+            // Loading placeholder
+            cardGradient
+                .overlay(ProgressView().controlSize(.small).tint(.white.opacity(0.4)))
         }
     }
+
+    private var cardGradient: some View {
+        LinearGradient(
+            colors: [wallpaper.category.color.opacity(0.4), DinoColors.surface],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    // MARK: - Thumbnail Loading
 
     private func loadThumbnail() async {
-        guard let path = wallpaper.thumbnailPath else { return }
-        do {
-            let data = try await StorageService.shared.downloadThumbnail(remotePath: path)
-            if let img = NSImage(data: data) {
-                thumbnailImage = img
-                withAnimation { isImageLoaded = true }
+        // For local/bundled videos, generate thumbnail from video
+        if let localURL = wallpaper.localURL {
+            if let image = await generateVideoThumbnail(from: localURL) {
+                thumbnailImage = image
+                return
             }
-        } catch {
-            // Placeholder kalır
+        }
+
+        // Try loading from Supabase thumbnail
+        if let thumbnailPath = wallpaper.thumbnailPath {
+            do {
+                let url = try StorageService.shared.getThumbnailURL(path: thumbnailPath)
+                let (data, _) = try await URLSession.shared.data(from: url)
+                if let image = NSImage(data: data) {
+                    thumbnailImage = image
+                    return
+                }
+            } catch {
+                // Fall through to failure
+            }
+        }
+
+        // Try generating thumbnail from remote URL for video type
+        if wallpaper.contentType == .video {
+            if let image = await generateVideoThumbnail(from: wallpaper.remoteURL) {
+                thumbnailImage = image
+                return
+            }
+        }
+
+        loadFailed = true
+    }
+
+    private func generateVideoThumbnail(from url: URL) async -> NSImage? {
+        return await withCheckedContinuation { continuation in
+            let asset = AVURLAsset(url: url)
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 400, height: 250)
+
+            let time = CMTime(seconds: 1.0, preferredTimescale: 600)
+            generator.generateCGImagesAsynchronously(forTimes: [NSValue(time: time)]) { _, image, _, _, _ in
+                if let image {
+                    continuation.resume(returning: NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height)))
+                } else {
+                    continuation.resume(returning: nil)
+                }
+            }
         }
     }
 }
 
-// MARK: - Small Gradient Badge
-
-struct SmallBadge: View {
-    let text: String
-    let gradient: [Color]
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 8, weight: .bold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2.5)
-            .background(
-                LinearGradient(
-                    colors: gradient,
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .opacity(0.85)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-    }
-}
-
-// MARK: - Badge (mevcut, uyumluluk için)
+// MARK: - Badge View
 
 struct Badge: View {
     let text: String
@@ -211,9 +196,9 @@ struct Badge: View {
         Text(text)
             .font(.system(size: 9, weight: .bold))
             .foregroundStyle(.white)
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 7)
             .padding(.vertical, 3)
-            .background(color.opacity(0.85))
+            .background(color.opacity(0.8))
             .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 }

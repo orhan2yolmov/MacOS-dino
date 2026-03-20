@@ -1,233 +1,309 @@
 // GalleryView.swift
-// MacOS-Dino – Ana Galeri Görünümü (Modern Redesign)
+// MacOS-Dino – Professional Gallery (Dark Theme Redesign)
+// HTML Reference-based 3-column layout: Sidebar | Grid | Detail
 
 import SwiftUI
+
+// MARK: - Gallery Navigation Tab
+
+enum GalleryNavTab: String, CaseIterable {
+    case hot = "Popüler"
+    case new = "Yeni"
+    case favorites = "Favoriler"
+    case uploads = "Yüklediklerim"
+    case downloaded = "İndirilenler"
+
+    var icon: String {
+        switch self {
+        case .hot: return "flame.fill"
+        case .new: return "sparkles"
+        case .favorites: return "heart.fill"
+        case .uploads: return "icloud.and.arrow.up.fill"
+        case .downloaded: return "arrow.down.circle.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .hot: return .orange
+        case .new: return DinoColors.primary
+        case .favorites: return .pink
+        case .uploads: return .cyan
+        case .downloaded: return DinoColors.success
+        }
+    }
+}
+
+// MARK: - Gallery View
 
 struct GalleryView: View {
     @EnvironmentObject var engine: WallpaperEngine
     @EnvironmentObject var auth: AuthService
     @EnvironmentObject var subscription: SubscriptionManager
 
-    @StateObject private var wallpaperService = WallpaperServiceViewModel()
+    @StateObject private var viewModel = WallpaperServiceViewModel()
+    @ObservedObject private var localManager = WallpaperManager.shared
 
     @State private var selectedWallpaper: Wallpaper?
     @State private var searchText = ""
-    @State private var selectedCategory: WallpaperCategory? = nil
-    @State private var selectedRatio: AspectRatio? = nil
-    @State private var sortOption: WallpaperSortOption = .hot
+    @State private var selectedNavTab: GalleryNavTab = .hot
+    @State private var selectedCategories: Set<WallpaperCategory> = []
+    @State private var selectedRatios: Set<AspectRatio> = []
     @State private var viewMode: ViewMode = .grid
-    @State private var showingAuth = false
 
-    enum ViewMode {
-        case grid, list
-    }
+    enum ViewMode { case grid, list }
 
     var body: some View {
-        NavigationSplitView {
-            // Sol Sidebar
-            sidebarContent
-                .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
-        } content: {
-            // Merkez: Wallpaper Grid
-            mainContent
-                .navigationSplitViewColumnWidth(min: 500, ideal: 700, max: .infinity)
-        } detail: {
-            // Sağ: Detay Paneli
-            detailPanel
-                .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 340)
+        HStack(spacing: 0) {
+            gallerySidebar
+            Rectangle().fill(DinoColors.border.opacity(0.4)).frame(width: 1)
+            galleryMainContent
+            Rectangle().fill(DinoColors.border.opacity(0.4)).frame(width: 1)
+            galleryDetailPanel
         }
-        .searchable(text: $searchText, prompt: "Wallpaper ara...")
-        .onChange(of: searchText) { _, newValue in
-            Task { await wallpaperService.search(query: newValue) }
-        }
+        .background(DinoColors.bg)
+        .preferredColorScheme(.dark)
         .task {
-            await wallpaperService.loadWallpapers(category: selectedCategory, sort: sortOption)
-        }
-        .sheet(isPresented: $showingAuth) {
-            LoginView()
-                .frame(width: 400, height: 500)
+            await viewModel.loadWallpapers(sort: .hot)
         }
     }
 
-    // MARK: - Sidebar
+    // MARK: - All Displayable Wallpapers
 
-    private var sidebarContent: some View {
+    private var displayableWallpapers: [Wallpaper] {
+        var all = localManager.allLocalWallpapers
+
+        // Add remote wallpapers that aren't duplicates of local ones
+        let localIDs = Set(all.map { $0.id })
+        for wp in viewModel.wallpapers where !localIDs.contains(wp.id) {
+            all.append(wp)
+        }
+
+        // Filter by search
+        if !searchText.isEmpty {
+            all = all.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+        }
+
+        // Filter by selected categories
+        if !selectedCategories.isEmpty {
+            all = all.filter { selectedCategories.contains($0.category) }
+        }
+
+        // Filter by selected ratios
+        if !selectedRatios.isEmpty {
+            all = all.filter { selectedRatios.contains($0.aspectRatio) }
+        }
+
+        // Filter by nav tab
+        switch selectedNavTab {
+        case .hot:
+            all.sort { $0.popularityScore > $1.popularityScore }
+        case .new:
+            all.sort { $0.createdAt > $1.createdAt }
+        case .favorites:
+            all = all.filter { $0.isFeatured }
+        case .downloaded:
+            all = all.filter { $0.isDownloaded }
+        case .uploads:
+            all = all.filter { $0.category == .personal }
+        }
+
+        return all
+    }
+
+    // MARK: - Left Sidebar (w-72 → 260pt)
+
+    private var gallerySidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Logo + başlık
+            // Logo header
             HStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(LinearGradient(
-                            colors: [.blue, Color(red: 0.4, green: 0.2, blue: 0.9)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                        .frame(width: 32, height: 32)
-                    Image(systemName: "sparkles.rectangle.stack")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white)
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(LinearGradient(colors: [DinoColors.primary, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 36, height: 36)
+                    .overlay(Image(systemName: "sparkles.rectangle.stack").font(.system(size: 16, weight: .semibold)).foregroundStyle(.white))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Wallpapers").font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
+                    Text("Professional Suite").font(.system(size: 10, weight: .medium)).foregroundStyle(DinoColors.textDim)
                 }
-                Text("MacOS-Dino")
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                Spacer()
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 18)
             .padding(.vertical, 16)
 
-            Divider().opacity(0.3)
+            // Search field
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(DinoColors.textDim)
+                TextField("Ara...", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white)
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 8).fill(DinoColors.surface).overlay(RoundedRectangle(cornerRadius: 8).stroke(DinoColors.border.opacity(0.5), lineWidth: 1)))
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
 
-            // Navigasyon listesi
-            ScrollView {
+            Divider().foregroundStyle(DinoColors.border).opacity(0.3)
+
+            // Scrollable sidebar content
+            ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 2) {
-                    // Keşfet
-                    SidebarSection(title: "KEŞFET") {
-                        SidebarButton(
-                            icon: "flame.fill",
-                            label: "Popüler",
-                            color: .orange,
-                            isActive: sortOption == .hot
-                        ) {
-                            sortOption = .hot
-                            Task { await wallpaperService.loadWallpapers(category: selectedCategory, sort: .hot) }
-                        }
-                        SidebarButton(
-                            icon: "sparkles",
-                            label: "Yeni",
-                            color: .blue,
-                            isActive: sortOption == .new
-                        ) {
-                            sortOption = .new
-                            Task { await wallpaperService.loadWallpapers(category: selectedCategory, sort: .new) }
-                        }
-                        SidebarButton(icon: "heart.fill", label: "Favoriler", color: .pink) {}
-                        SidebarButton(icon: "icloud.and.arrow.up", label: "Yüklediklerim", color: .cyan) {}
-                        SidebarButton(icon: "arrow.down.circle.fill", label: "İndirilenler", color: .green) {}
+                    // Navigation section
+                    sidebarSectionHeader("NAVİGASYON")
+                    ForEach(GalleryNavTab.allCases, id: \.self) { tab in
+                        sidebarNavButton(tab: tab)
                     }
 
-                    SidebarSection(title: "KATEGORİLER") {
-                        ForEach(WallpaperCategory.allCases) { category in
-                            SidebarButton(
-                                icon: category.icon,
-                                label: category.displayName,
-                                color: category.color,
-                                isActive: selectedCategory == category
-                            ) {
-                                withAnimation(.spring(duration: 0.25)) {
-                                    selectedCategory = selectedCategory == category ? nil : category
-                                }
-                                Task {
-                                    await wallpaperService.loadWallpapers(
-                                        category: selectedCategory,
-                                        sort: sortOption
-                                    )
-                                }
-                            }
+                    // Categories section
+                    sidebarSectionHeader("KATEGORİLER")
+                    ForEach(WallpaperCategory.allCases.prefix(8)) { category in
+                        sidebarCheckbox(
+                            label: category.displayName,
+                            isSelected: selectedCategories.contains(category),
+                            color: category.color
+                        ) {
+                            if selectedCategories.contains(category) { selectedCategories.remove(category) }
+                            else { selectedCategories.insert(category) }
+                        }
+                    }
+
+                    // Aspect Ratio section
+                    sidebarSectionHeader("ORAN")
+                    ForEach(AspectRatio.allCases.prefix(3)) { ratio in
+                        sidebarCheckbox(
+                            label: ratio.rawValue,
+                            isSelected: selectedRatios.contains(ratio),
+                            color: DinoColors.primary
+                        ) {
+                            if selectedRatios.contains(ratio) { selectedRatios.remove(ratio) }
+                            else { selectedRatios.insert(ratio) }
                         }
                     }
                 }
                 .padding(.vertical, 8)
             }
 
-            Divider().opacity(0.3)
+            Divider().foregroundStyle(DinoColors.border).opacity(0.3)
 
-            // Yenile butonu
+            // Refresh button at bottom
             Button {
-                Task { await wallpaperService.loadWallpapers(category: selectedCategory, sort: sortOption) }
+                Task { await viewModel.loadWallpapers(sort: selectedNavTab == .new ? .new : .hot) }
             } label: {
-                Label("Yenile", systemImage: "arrow.clockwise")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.clockwise").font(.system(size: 12))
+                    Text("Verileri Yenile").font(.system(size: 12, weight: .medium))
+                    Spacer()
+                }
+                .foregroundStyle(DinoColors.textSec)
+                .padding(.horizontal, 18).padding(.vertical, 12)
             }
             .buttonStyle(.plain)
         }
-        .background(Color(red: 0.06, green: 0.07, blue: 0.12))
+        .frame(width: 240)
+        .background(Color(red: 0.039, green: 0.059, blue: 0.094))
+    }
+
+    // MARK: - Sidebar Helpers
+
+    private func sidebarSectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .foregroundStyle(DinoColors.textDim)
+            .padding(.horizontal, 18)
+            .padding(.top, 16)
+            .padding(.bottom, 4)
+    }
+
+    private func sidebarNavButton(tab: GalleryNavTab) -> some View {
+        let isActive = selectedNavTab == tab
+        return Button {
+            withAnimation(.easeInOut(duration: 0.15)) { selectedNavTab = tab }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(isActive ? tab.color : DinoColors.textSec)
+                    .frame(width: 20)
+                Text(tab.rawValue)
+                    .font(.system(size: 12, weight: isActive ? .semibold : .regular))
+                    .foregroundStyle(isActive ? .white : DinoColors.textSec)
+                Spacer()
+                if isActive {
+                    Circle().fill(tab.color).frame(width: 6, height: 6)
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 7)
+            .background(RoundedRectangle(cornerRadius: 8).fill(isActive ? tab.color.opacity(0.12) : Color.clear))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 6)
+    }
+
+    private func sidebarCheckbox(label: String, isSelected: Bool, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isSelected ? color : Color.clear)
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(isSelected ? color : DinoColors.border, lineWidth: 1.5))
+                    .frame(width: 16, height: 16)
+                    .overlay(isSelected ? Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundStyle(.white) : nil)
+                Text(label)
+                    .font(.system(size: 12))
+                    .foregroundStyle(isSelected ? .white : DinoColors.textSec)
+                Spacer()
+            }
+            .padding(.horizontal, 18).padding(.vertical, 5)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Main Content (Grid)
 
-    private var mainContent: some View {
+    private var galleryMainContent: some View {
         VStack(spacing: 0) {
-            // Üst header
+            // Header
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(selectedCategory?.displayName ?? "Keşfet")
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                    Text("Discovery")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
-
-                    Text(headerSubtitle)
+                    Text("\(displayableWallpapers.count) wallpaper bulundu")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .foregroundStyle(DinoColors.textDim)
                 }
 
                 Spacer()
 
-                // Grid/List toggle
+                // View mode toggle
                 HStack(spacing: 4) {
-                    ForEach([(ViewMode.grid, "square.grid.2x2"), (ViewMode.list, "list.bullet")], id: \.0) { mode, icon in
-                        Button {
-                            withAnimation(.spring(duration: 0.2)) { viewMode = mode }
-                        } label: {
-                            Image(systemName: icon)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(viewMode == mode ? .white : .white.opacity(0.35))
-                                .frame(width: 30, height: 30)
-                                .background(viewMode == mode ? .white.opacity(0.12) : .clear)
-                                .clipShape(RoundedRectangle(cornerRadius: 7))
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    gridToggleButton(mode: .grid, icon: "square.grid.2x2.fill")
+                    gridToggleButton(mode: .list, icon: "list.bullet")
                 }
                 .padding(3)
-                .background(.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 9))
+                .background(RoundedRectangle(cornerRadius: 8).fill(DinoColors.surface))
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
-            .padding(.bottom, 16)
+            .padding(.bottom, 14)
 
-            // Wallpaper grid
-            if wallpaperService.isLoading {
+            // Grid
+            if displayableWallpapers.isEmpty {
                 Spacer()
-                VStack(spacing: 12) {
-                    ProgressView()
-                        .controlSize(.large)
-                        .tint(.blue)
-                    Text("Yükleniyor...")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.4))
-                }
-                Spacer()
-            } else if wallpaperService.wallpapers.isEmpty {
-                Spacer()
-                VStack(spacing: 16) {
-                    Image(systemName: "photo.on.rectangle.angled")
-                        .font(.system(size: 48, weight: .light))
-                        .foregroundStyle(.white.opacity(0.2))
-                    Text("Wallpaper Bulunamadı")
-                        .font(.headline)
-                        .foregroundStyle(.white.opacity(0.5))
-                    Text("Farklı filtreler deneyin")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.25))
-                }
+                emptyStateView
                 Spacer()
             } else {
                 ScrollView {
                     LazyVGrid(
-                        columns: gridColumns,
+                        columns: [GridItem(.adaptive(minimum: 200, maximum: 300), spacing: 14)],
                         spacing: 14
                     ) {
-                        ForEach(wallpaperService.wallpapers) { wallpaper in
+                        ForEach(displayableWallpapers) { wallpaper in
                             WallpaperCard(
                                 wallpaper: wallpaper,
                                 isSelected: selectedWallpaper?.id == wallpaper.id
                             )
                             .onTapGesture {
-                                withAnimation(.spring(duration: 0.3)) {
-                                    selectedWallpaper = wallpaper
-                                }
+                                withAnimation(.easeInOut(duration: 0.2)) { selectedWallpaper = wallpaper }
                             }
                         }
                     }
@@ -236,103 +312,61 @@ struct GalleryView: View {
                 }
             }
         }
-        .background(Color(red: 0.08, green: 0.09, blue: 0.14))
+        .frame(minWidth: 460)
+        .background(DinoColors.bg)
     }
 
-    // MARK: - Detail Panel
+    private func gridToggleButton(mode: ViewMode, icon: String) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) { viewMode = mode }
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(viewMode == mode ? .white : DinoColors.textDim)
+                .frame(width: 28, height: 28)
+                .background(RoundedRectangle(cornerRadius: 6).fill(viewMode == mode ? DinoColors.primary.opacity(0.6) : Color.clear))
+        }
+        .buttonStyle(.plain)
+    }
 
-    private var detailPanel: some View {
+    private var emptyStateView: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "photo.on.rectangle.angled")
+                .font(.system(size: 48, weight: .ultraLight))
+                .foregroundStyle(DinoColors.textDim)
+            Text("Wallpaper Bulunamadı")
+                .font(.system(size: 16, weight: .semibold)).foregroundStyle(DinoColors.textSec)
+            Text("Farklı filtreler deneyin veya arama yapın")
+                .font(.system(size: 12)).foregroundStyle(DinoColors.textDim)
+        }
+    }
+
+    // MARK: - Detail Panel (right sidebar w-80 → 300pt)
+
+    private var galleryDetailPanel: some View {
         Group {
             if let wallpaper = selectedWallpaper {
                 WallpaperDetailView(wallpaper: wallpaper)
                     .environmentObject(engine)
             } else {
-                VStack(spacing: 14) {
+                VStack(spacing: 16) {
+                    Spacer()
                     Image(systemName: "photo.on.rectangle")
-                        .font(.system(size: 44, weight: .light))
-                        .foregroundStyle(.white.opacity(0.15))
+                        .font(.system(size: 48, weight: .ultraLight))
+                        .foregroundStyle(DinoColors.textDim.opacity(0.5))
                     Text("Wallpaper Seçin")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(DinoColors.textSec)
                     Text("Detayları ve önizlemeyi\nburada görüntüleyin")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.2))
+                        .font(.system(size: 11))
+                        .foregroundStyle(DinoColors.textDim)
                         .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(red: 0.07, green: 0.08, blue: 0.13))
-            }
-        }
-    }
-
-    // MARK: - Helpers
-
-    private var gridColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: 190, maximum: 280), spacing: 14)]
-    }
-
-    private var headerSubtitle: String {
-        let count = wallpaperService.wallpapers.count
-        let cat = selectedCategory?.displayName ?? "tüm kategoriler"
-        return "\(count) wallpaper · \(cat)"
-    }
-}
-
-// MARK: - Sidebar Helper Views
-
-private struct SidebarSection<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(title)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.3))
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 4)
-
-            content
-        }
-    }
-}
-
-private struct SidebarButton: View {
-    let icon: String
-    let label: String
-    let color: Color
-    var isActive: Bool = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(isActive ? color : .white.opacity(0.45))
-                    .frame(width: 18)
-
-                Text(label)
-                    .font(.system(size: 13, weight: isActive ? .semibold : .regular))
-                    .foregroundStyle(isActive ? .white : .white.opacity(0.65))
-
-                Spacer()
-
-                if isActive {
-                    Circle()
-                        .fill(color)
-                        .frame(width: 6, height: 6)
+                    Spacer()
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-            .background(isActive ? color.opacity(0.12) : .clear)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 6)
+        .frame(width: 300)
+        .background(Color(red: 0.047, green: 0.067, blue: 0.106))
     }
 }
 
@@ -356,18 +390,11 @@ final class WallpaperServiceViewModel: ObservableObject {
         currentPage = page
 
         do {
-            let results = try await service.fetchWallpapers(
-                page: page,
-                category: category,
-                sortBy: sort
-            )
-            if page == 0 {
-                wallpapers = results
-            } else {
-                wallpapers.append(contentsOf: results)
-            }
+            let results = try await service.fetchWallpapers(page: page, category: category, sortBy: sort)
+            if page == 0 { wallpapers = results } else { wallpapers.append(contentsOf: results) }
         } catch {
             errorMessage = error.localizedDescription
+            print("⚠️ Wallpaper yükleme hatası: \(error.localizedDescription)")
         }
 
         isLoading = false
@@ -379,17 +406,9 @@ final class WallpaperServiceViewModel: ObservableObject {
     }
 
     func search(query: String) async {
-        guard !query.isEmpty else {
-            await loadWallpapers()
-            return
-        }
-
+        guard !query.isEmpty else { await loadWallpapers(); return }
         isLoading = true
-        do {
-            wallpapers = try await service.searchWallpapers(query: query)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        do { wallpapers = try await service.searchWallpapers(query: query) } catch { errorMessage = error.localizedDescription }
         isLoading = false
     }
 }
